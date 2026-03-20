@@ -1,0 +1,46 @@
+export type JsonRpcId = string | number;
+
+export type JsonRpcRequest<TParams = unknown> = {
+  jsonrpc: "2.0";
+  id?: JsonRpcId;
+  method: string;
+  params?: TParams;
+};
+
+export type JsonRpcError = {
+  code: number;
+  message: string;
+  data?: unknown;
+};
+
+export type JsonRpcResponse<TResult = unknown> = {
+  jsonrpc: "2.0";
+  id: JsonRpcId;
+  result?: TResult;
+  error?: JsonRpcError;
+};
+
+export function buildRequest<TParams = unknown>(
+  method: string,
+  params?: TParams,
+  id?: JsonRpcId,
+): JsonRpcRequest<TParams> {
+  return {
+    jsonrpc: "2.0",
+    id,
+    method,
+    params,
+  };
+}
+
+export function parseJsonRpc(raw: string): JsonRpcRequest | JsonRpcResponse | null {
+  try {
+    const parsed = JSON.parse(raw) as JsonRpcRequest | JsonRpcResponse;
+    if (parsed && parsed.jsonrpc === "2.0") {
+      return parsed;
+    }
+    return null;
+  } catch {
+    return null;
+  }
+}
