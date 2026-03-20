@@ -37,6 +37,11 @@ type SessionStore = {
   removeProject: (projectId: string) => void;
   addSessionToProject: (projectId: string, session: ProjectSession) => void;
   removeSessionFromProject: (projectId: string, sessionId: string) => void;
+  replaceProjects: (
+    projects: Project[],
+    activeProjectId?: string | null,
+    activeSessionId?: string | null,
+  ) => void;
   setActiveProject: (projectId: string | null) => void;
   setActiveSession: (sessionId: string | null) => void;
   updateProjectLastActive: (projectId: string, sessionId: string) => void;
@@ -49,6 +54,44 @@ const IDENTITY_PUBLIC_KEY = "relay.identity.public";
 const PROJECTS_KEY = "projects.list";
 const ACTIVE_PROJECT_KEY = "active.project";
 const ACTIVE_SESSION_KEY = "active.session";
+const SECURESTORE_SAFE_VALUE_BYTES = 1900;
+
+const LEGACY_MOCK_PROJECT_IDS = new Set(["proj-web", "proj-mobile", "proj-backend"]);
+const SYNTHETIC_PROJECT_IDS = new Set(["paired-session"]);
+
+function isLegacyMockProjects(projects: Project[]) {
+  if (!Array.isArray(projects) || projects.length === 0) {
+    return false;
+  }
+
+  return projects.some(
+    (project) => LEGACY_MOCK_PROJECT_IDS.has(project.id) || SYNTHETIC_PROJECT_IDS.has(project.id),
+  );
+}
+
+function utf8ByteLength(value: string) {
+  try {
+    return new TextEncoder().encode(value).length;
+  } catch {
+    return value.length;
+  }
+}
+
+async function persistProjectsSafely(projects: Project[]) {
+  const serialized = JSON.stringify(projects);
+  const sizeBytes = utf8ByteLength(serialized);
+
+  if (sizeBytes > SECURESTORE_SAFE_VALUE_BYTES) {
+    // SecureStore is for small secrets; avoid oversized writes that can fail.
+    console.warn(
+      `[mobile][session/store] projects payload too large for SecureStore (${sizeBytes} bytes), skipping persistence`,
+    );
+    await SecureStore.deleteItemAsync(PROJECTS_KEY);
+    return;
+  }
+
+  await SecureStore.setItemAsync(PROJECTS_KEY, serialized);
+}
 
 export const useSessionStore = create<SessionStore>((set, get) => ({
   pairing: null,
@@ -81,7 +124,7 @@ export const useSessionStore = create<SessionStore>((set, get) => ({
         projects: [...state.projects, project],
       };
     });
-    void SecureStore.setItemAsync(PROJECTS_KEY, JSON.stringify(get().projects));
+    void persistProjectsSafely(get().projects);
   },
   removeProject(projectId) {
     set((state) => ({
@@ -90,7 +133,7 @@ export const useSessionStore = create<SessionStore>((set, get) => ({
         state.activeProjectId === projectId ? null : state.activeProjectId,
     }));
     void Promise.all([
-      SecureStore.setItemAsync(PROJECTS_KEY, JSON.stringify(get().projects)),
+      persistProjectsSafely(get().projects),
       SecureStore.setItemAsync(ACTIVE_PROJECT_KEY, get().activeProjectId || ""),
     ]);
   },
@@ -110,7 +153,7 @@ export const useSessionStore = create<SessionStore>((set, get) => ({
         }),
       };
     });
-    void SecureStore.setItemAsync(PROJECTS_KEY, JSON.stringify(get().projects));
+    void persistProjectsSafely(get().projects);
   },
   removeSessionFromProject(projectId, sessionId) {
     set((state) => ({
@@ -127,8 +170,24 @@ export const useSessionStore = create<SessionStore>((set, get) => ({
         state.activeSessionId === sessionId ? null : state.activeSessionId,
     }));
     void Promise.all([
-      SecureStore.setItemAsync(PROJECTS_KEY, JSON.stringify(get().projects)),
+      persistProjectsSafely(get().projects),
       SecureStore.setItemAsync(ACTIVE_SESSION_KEY, get().activeSessionId || ""),
+    ]);
+  },
+  replaceProjects(projects, activeProjectId, activeSessionId) {
+    const nextActiveProjectId = activeProjectId ?? null;
+    const nextActiveSessionId = activeSessionId ?? null;
+
+    set({
+      projects,
+      activeProjectId: nextActiveProjectId,
+      activeSessionId: nextActiveSessionId,
+    });
+
+    void Promise.all([
+      persistProjectsSafely(projects),
+      SecureStore.setItemAsync(ACTIVE_PROJECT_KEY, nextActiveProjectId || ""),
+      SecureStore.setItemAsync(ACTIVE_SESSION_KEY, nextActiveSessionId || ""),
     ]);
   },
   setActiveProject(projectId) {
@@ -159,7 +218,7 @@ export const useSessionStore = create<SessionStore>((set, get) => ({
       activeSessionId: sessionId,
     }));
     void Promise.all([
-      SecureStore.setItemAsync(PROJECTS_KEY, JSON.stringify(get().projects)),
+      persistProjectsSafely(get().projects),
       SecureStore.setItemAsync(ACTIVE_PROJECT_KEY, projectId),
       SecureStore.setItemAsync(ACTIVE_SESSION_KEY, sessionId),
     ]);
@@ -175,13 +234,28 @@ export const useSessionStore = create<SessionStore>((set, get) => ({
         SecureStore.getItemAsync(ACTIVE_SESSION_KEY),
       ]);
 
+    let parsedProjects = projectsRaw ? (JSON.parse(projectsRaw) as Project[]) : [];
+    let parsedActiveProjectId = activeProjectId || null;
+    let parsedActiveSessionId = activeSessionId || null;
+
+    if (isLegacyMockProjects(parsedProjects)) {
+      parsedProjects = [];
+      parsedActiveProjectId = null;
+      parsedActiveSessionId = null;
+      await Promise.all([
+        SecureStore.setItemAsync(PROJECTS_KEY, JSON.stringify([])),
+        SecureStore.setItemAsync(ACTIVE_PROJECT_KEY, ""),
+        SecureStore.setItemAsync(ACTIVE_SESSION_KEY, ""),
+      ]);
+    }
+
     set({
       pairing: pairingRaw ? (JSON.parse(pairingRaw) as PairingState) : null,
       mobileIdentityPrivateKeyHex: privateKeyHex,
       mobileIdentityPublicKeyHex: publicKeyHex,
-      projects: projectsRaw ? (JSON.parse(projectsRaw) as Project[]) : [],
-      activeProjectId: activeProjectId || null,
-      activeSessionId: activeSessionId || null,
+      projects: parsedProjects,
+      activeProjectId: parsedActiveProjectId,
+      activeSessionId: parsedActiveSessionId,
     });
   },
 }));

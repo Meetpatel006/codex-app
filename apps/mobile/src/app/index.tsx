@@ -1,5 +1,5 @@
-import { useRouter } from "expo-router";
-import React, { useEffect, useMemo, useState } from "react";
+import { router } from "expo-router";
+import React, { useCallback, useEffect, useMemo, useState } from "react";
 import {
   Pressable,
   ScrollView,
@@ -17,8 +17,110 @@ import { relayService } from "@/services/relay";
 import { useChatStore } from "@/store/chat";
 import { useSessionStore } from "@/store/session";
 
+type CodexSessionSummary = {
+  sessionId?: string;
+  threadId?: string;
+  cwd?: string;
+  updatedAtMs?: number;
+  rolloutPath?: string;
+};
+
+type CodexSessionsListResult = {
+  sessions?: CodexSessionSummary[];
+};
+
+function mapCodexSessionsToProjects(sessions: CodexSessionSummary[]) {
+  const byProject = new Map<
+    string,
+    {
+      id: string;
+      name: string;
+      description?: string;
+      createdAt: number;
+      sessions: Array<{
+        id: string;
+        name: string;
+        createdAt: number;
+        lastActiveAt: number;
+      }>;
+    }
+  >();
+
+  for (const session of sessions) {
+    const rawSessionId = (session.sessionId || session.threadId || "").trim();
+    if (!rawSessionId) {
+      continue;
+    }
+
+    // Keep individual rollout entries visible in mobile like relay-test does.
+    const sessionKey = (session.rolloutPath || "").trim() || rawSessionId;
+
+    const lastActiveAt = Number.isFinite(session.updatedAtMs) ? Number(session.updatedAtMs) : Date.now();
+    const cwd = (session.cwd || "").trim();
+    const projectKey = cwd ? normalizePathKey(cwd) : "unknown-workspace";
+    const projectName = cwd ? humanizeProjectName(cwd) : "Unknown Workspace";
+
+    if (!byProject.has(projectKey)) {
+      byProject.set(projectKey, {
+        id: projectKey,
+        name: projectName,
+        description: cwd || undefined,
+        createdAt: lastActiveAt,
+        sessions: [],
+      });
+    }
+
+    const project = byProject.get(projectKey);
+    if (!project) {
+      continue;
+    }
+
+    const alreadyExists = project.sessions.some((item) => item.id === sessionKey);
+    if (alreadyExists) {
+      continue;
+    }
+
+    project.createdAt = Math.min(project.createdAt, lastActiveAt);
+    project.sessions.push({
+      id: sessionKey,
+      name: `Session ${rawSessionId.slice(0, 8)}`,
+      createdAt: lastActiveAt,
+      lastActiveAt,
+    });
+  }
+
+  return Array.from(byProject.values())
+    .map((project) => ({
+      ...project,
+      sessions: project.sessions.sort((lhs, rhs) => rhs.lastActiveAt - lhs.lastActiveAt),
+    }))
+    .sort((lhs, rhs) => {
+      const lhsLatest = lhs.sessions[0]?.lastActiveAt || lhs.createdAt;
+      const rhsLatest = rhs.sessions[0]?.lastActiveAt || rhs.createdAt;
+      return rhsLatest - lhsLatest;
+    });
+}
+
+function normalizePathKey(input: string) {
+  return input.replace(/\\/g, "/").replace(/\/+$/g, "").toLowerCase();
+}
+
+function humanizeProjectName(cwd: string) {
+  const normalized = cwd.replace(/\\/g, "/").replace(/\/+$/g, "");
+  const parts = normalized.split("/").filter(Boolean);
+  if (parts.length === 0) {
+    return "Workspace";
+  }
+
+  const markerIndex = parts.findIndex((part) => part === "apps" || part === "packages");
+  if (markerIndex >= 0 && parts[markerIndex + 1]) {
+    return `${parts[markerIndex]} / ${parts[markerIndex + 1]}`;
+  }
+
+  return parts[parts.length - 1];
+}
+
 export default function ChatScreen() {
-  const router = useRouter();
   const [input, setInput] = useState("");
   const [assistantMessageId, setAssistantMessageId] = useState<string | null>(null);
 
@@ -27,9 +129,10 @@ export default function ChatScreen() {
   const privateKey = useSessionStore((state) => state.mobileIdentityPrivateKeyHex);
   const publicKey = useSessionStore((state) => state.mobileIdentityPublicKeyHex);
   const setIdentity = useSessionStore((state) => state.setMobileIdentity);
+  const replaceProjects = useSessionStore((state) => state.replaceProjects);
   const projects = useSessionStore((state) => state.projects);
-  const addProject = useSessionStore((state) => state.addProject);
-  const addSessionToProject = useSessionStore((state) => state.addSessionToProject);
+  const activeProjectId = useSessionStore((state) => state.activeProjectId);
+  const activeSessionId = useSessionStore((state) => state.activeSessionId);
   const [sidebarOpen, setSidebarOpen] = useState(false);
 
   const presence = useChatStore((state) => state.presence);
@@ -45,91 +148,75 @@ export default function ChatScreen() {
     void loadSession();
   }, [loadSession]);
 
-  // Initialize sample projects if none exist
-  useEffect(() => {
-    if (projects && projects.length === 0) {
-      const sampleProjects = [
-        {
-          id: 'proj-web',
-          name: 'Web App',
-          description: 'Main web application project',
-          createdAt: Date.now() - 7 * 24 * 60 * 60 * 1000, // 7 days ago
-          sessions: [
-            {
-              id: 'sess-web-1',
-              name: 'Authentication Flow',
-              createdAt: Date.now() - 5 * 24 * 60 * 60 * 1000,
-              lastActiveAt: Date.now() - 2 * 60 * 60 * 1000, // 2 hours ago
-            },
-            {
-              id: 'sess-web-2',
-              name: 'Dashboard Components',
-              createdAt: Date.now() - 3 * 24 * 60 * 60 * 1000,
-              lastActiveAt: Date.now() - 24 * 60 * 60 * 1000, // 1 day ago
-            },
-            {
-              id: 'sess-web-3',
-              name: 'API Integration',
-              createdAt: Date.now() - 1 * 24 * 60 * 60 * 1000,
-              lastActiveAt: Date.now() - 30 * 60 * 1000, // 30 mins ago
-            },
-          ],
-        },
-        {
-          id: 'proj-mobile',
-          name: 'Mobile App',
-          description: 'React Native mobile app',
-          createdAt: Date.now() - 5 * 24 * 60 * 60 * 1000,
-          sessions: [
-            {
-              id: 'sess-mobile-1',
-              name: 'Sidebar Implementation',
-              createdAt: Date.now() - 4 * 24 * 60 * 60 * 1000,
-              lastActiveAt: Date.now() - 60 * 1000, // 1 minute ago
-            },
-            {
-              id: 'sess-mobile-2',
-              name: 'Session Management',
-              createdAt: Date.now() - 2 * 24 * 60 * 60 * 1000,
-              lastActiveAt: Date.now() - 12 * 60 * 60 * 1000, // 12 hours ago
-            },
-          ],
-        },
-        {
-          id: 'proj-backend',
-          name: 'Backend API',
-          description: 'REST API services',
-          createdAt: Date.now() - 10 * 24 * 60 * 60 * 1000,
-          sessions: [
-            {
-              id: 'sess-backend-1',
-              name: 'Database Schema',
-              createdAt: Date.now() - 8 * 24 * 60 * 60 * 1000,
-              lastActiveAt: Date.now() - 5 * 24 * 60 * 60 * 1000,
-            },
-            {
-              id: 'sess-backend-2',
-              name: 'Authentication Endpoints',
-              createdAt: Date.now() - 6 * 24 * 60 * 60 * 1000,
-              lastActiveAt: Date.now() - 3 * 24 * 60 * 60 * 1000,
-            },
-          ],
-        },
-      ];
-
-      sampleProjects.forEach((project) => {
-        addProject(project);
-      });
+  const refreshCodexSessions = useCallback(async () => {
+    if (!relayService.isSecureReady()) {
+      console.log("[mobile][codex/sessions/list] secure not ready; skipping refresh");
+      return;
     }
-  }, [projects, addProject]);
+
+    console.log("[mobile][codex/sessions/list] requesting sessions from bridge...");
+    const rpcResult = await relayService.requestJson<CodexSessionsListResult>("codex/sessions/list", {
+      limit: 150,
+    });
+    const sessions = Array.isArray(rpcResult?.sessions) ? rpcResult.sessions : [];
+    console.log(
+      `[mobile][codex/sessions/list] received ${sessions.length} sessions`,
+      sessions.slice(0, 3).map((session) => ({
+        sessionId: session.sessionId || session.threadId || "",
+        cwd: session.cwd || "",
+        updatedAtMs: session.updatedAtMs || 0,
+      })),
+    );
+    const mappedProjects = mapCodexSessionsToProjects(sessions);
+    if (mappedProjects.length === 0) {
+      console.log("[mobile][codex/sessions/list] no real sessions found");
+    }
+    console.log(
+      `[mobile][codex/sessions/list] mapped ${mappedProjects.length} projects`,
+      mappedProjects.map((project) => ({
+        id: project.id,
+        name: project.name,
+        sessionCount: project.sessions.length,
+      })),
+    );
+
+    let nextActiveProjectId = activeProjectId;
+    let nextActiveSessionId = activeSessionId;
+
+    if (!nextActiveProjectId || !mappedProjects.some((project) => project.id === nextActiveProjectId)) {
+      nextActiveProjectId = mappedProjects[0]?.id || null;
+    }
+
+    if (nextActiveProjectId) {
+      const activeProject = mappedProjects.find((project) => project.id === nextActiveProjectId) || null;
+      const hasActiveSession =
+        !!nextActiveSessionId &&
+        !!activeProject?.sessions.some((session) => session.id === nextActiveSessionId);
+      if (!hasActiveSession) {
+        nextActiveSessionId = activeProject?.sessions[0]?.id || null;
+      }
+    }
+
+    replaceProjects(mappedProjects, nextActiveProjectId, nextActiveSessionId);
+    console.log(
+      `[mobile][codex/sessions/list] store updated activeProject=${nextActiveProjectId || "none"} activeSession=${nextActiveSessionId || "none"}`,
+    );
+  }, [activeProjectId, activeSessionId, replaceProjects]);
 
   useEffect(() => {
     const onPresence = relayService.on("presence", (nextPresence) => {
       setPresence(nextPresence);
     });
 
+    const onError = relayService.on("error", (error) => {
+      console.warn("[mobile][relay/error]", error?.message || String(error));
+    });
+
     const onReady = relayService.on("ready", () => {
       setPresence("online");
+      void refreshCodexSessions().catch((error) => {
+        console.warn("[mobile][codex/sessions/list] refresh failed", error);
+      });
     });
 
     const onMessage = relayService.on("message", (payload) => {
@@ -149,10 +236,38 @@ export default function ChatScreen() {
 
     return () => {
       onPresence();
+      onError();
       onReady();
       onMessage();
     };
-  }, [assistantMessageId, appendAssistantDelta, completeAssistantMessage, setPresence]);
+  }, [
+    assistantMessageId,
+    appendAssistantDelta,
+    completeAssistantMessage,
+    refreshCodexSessions,
+    setPresence,
+  ]);
+
+  useEffect(() => {
+    if (!pairing) {
+      return;
+    }
+
+    const shouldRetry = projects.length === 0;
+    if (!shouldRetry) {
+      return;
+    }
+
+    const retryTimer = setTimeout(() => {
+      void refreshCodexSessions().catch((error) => {
+        console.warn("[mobile][codex/sessions/list] retry failed", error);
+      });
+    }, 2500);
+
+    return () => {
+      clearTimeout(retryTimer);
+    };
+  }, [pairing, projects, refreshCodexSessions]);
 
   useEffect(() => {
     async function connect() {
@@ -179,14 +294,18 @@ export default function ChatScreen() {
         relayUrl: pairing.relayUrl,
         sessionId: pairing.sessionId,
         identityPrivateKeyHex: identityPrivate,
+        bridgeIdentityPublicKey: pairing.bridgeIdentityPublicKey,
       });
     }
 
     void connect();
+  }, [pairing, privateKey, publicKey, setIdentity]);
+
+  useEffect(() => {
     return () => {
       relayService.disconnect();
     };
-  }, [pairing, privateKey, publicKey, router, setIdentity]);
+  }, []);
 
   async function send() {
     const text = input.trim();
@@ -218,8 +337,9 @@ export default function ChatScreen() {
         <Pressable
           onPress={() => setSidebarOpen(true)}
           style={styles.sessionButton}
+          accessibilityLabel="Open sidebar"
         >
-          <Text style={styles.sessionButtonText}>Sessions</Text>
+          <Text style={styles.sessionButtonText}>☰</Text>
         </Pressable>
         <Text style={styles.title}>Chat</Text>
         <PresenceIndicator status={presence} />

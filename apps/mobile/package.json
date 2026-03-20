@@ -11,6 +11,7 @@
     "lint": "expo lint"
   },
   "dependencies": {
+    "@noble/ciphers": "^2.1.1",
     "@noble/curves": "^1.9.7",
     "@noble/hashes": "^1.8.0",
     "@react-navigation/bottom-tabs": "^7.15.5",
