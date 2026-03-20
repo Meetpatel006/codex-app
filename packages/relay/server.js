@@ -32,9 +32,10 @@ function createRelayServer({
   server.on("upgrade", (req, socket, head) => {
     const pathname = safePathname(req.url);
     const loggedPathname = redactRelayPathname(pathname);
+    const role = resolveRoleForLog(req);
     console.log(
       `[relay] upgrade request path=${loggedPathname} remote=${clientAddressKey(req, { trustProxy })} `
-      + `role=${readHeaderString(req.headers["x-role"]) || "missing"}`
+      + `role=${role || "missing"}`
     );
     if (!pathname.startsWith("/relay/")) {
       console.log(`[relay] rejecting upgrade for non-relay path: ${loggedPathname}`);
@@ -188,6 +189,25 @@ function safePathname(rawUrl) {
   } catch {
     return "/";
   }
+}
+
+function resolveRoleForLog(req) {
+  const headerRole = readHeaderString(req?.headers?.["x-role"]);
+  if (headerRole === "mac" || headerRole === "iphone") {
+    return headerRole;
+  }
+
+  try {
+    const url = new URL(req?.url || "/", "http://localhost");
+    const queryRole = readHeaderString(url.searchParams.get("role"));
+    if (queryRole === "mac" || queryRole === "iphone") {
+      return queryRole;
+    }
+  } catch {
+    return "";
+  }
+
+  return "";
 }
 
 // Hides bearer-like relay session ids from operational logs while preserving route shape.

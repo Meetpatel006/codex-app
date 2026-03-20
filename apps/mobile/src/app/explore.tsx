@@ -1,12 +1,14 @@
 import React, { useEffect, useState } from "react";
 import { Pressable, ScrollView, StyleSheet, Text, TextInput, View } from "react-native";
 
+import { ProjectSidebar } from "@/components/ProjectSidebar";
 import { buildRequest } from "@/services/jsonrpc";
 import { relayService } from "@/services/relay";
 
 export default function GitScreen() {
   const [commitMessage, setCommitMessage] = useState("WIP: mobile commit");
   const [output, setOutput] = useState("Run git/status to load repository state.");
+  const [sidebarOpen, setSidebarOpen] = useState(false);
 
   useEffect(() => {
     const unsubscribe = relayService.on("message", (payload) => {
@@ -23,7 +25,22 @@ export default function GitScreen() {
 
   return (
     <View style={styles.container}>
-      <Text style={styles.title}>Git</Text>
+      <ProjectSidebar
+        isOpen={sidebarOpen}
+        onClose={() => setSidebarOpen(false)}
+        onProjectSelect={(projectId) => console.log('Project selected:', projectId)}
+        onSessionSelect={(projectId, sessionId) => console.log('Session selected:', projectId, sessionId)}
+      />
+
+      <View style={styles.header}>
+        <Pressable
+          onPress={() => setSidebarOpen(true)}
+          style={styles.sessionButton}
+        >
+          <Text style={styles.sessionButtonText}>Sessions</Text>
+        </Pressable>
+        <Text style={styles.title}>Git</Text>
+      </View>
 
       <View style={styles.row}>
         <Pressable style={styles.button} onPress={() => void sendGit("git/status")}>
@@ -79,8 +96,30 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: "#0b0b0b",
-    padding: 12,
+    paddingHorizontal: 12,
+    paddingVertical: 12,
+    paddingTop: 48,
     gap: 10,
+  },
+  header: {
+    flexDirection: "row",
+    justifyContent: "flex-start",
+    alignItems: "center",
+    gap: 12,
+    marginBottom: 8,
+  },
+  sessionButton: {
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: "#3a3a3a",
+    backgroundColor: "#1a1a1a",
+  },
+  sessionButtonText: {
+    color: "#f0f0f0",
+    fontSize: 13,
+    fontWeight: "600",
   },
   title: {
     color: "#f0f0f0",

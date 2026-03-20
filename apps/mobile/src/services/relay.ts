@@ -30,6 +30,8 @@ type ConnectOptions = {
 export class RelayService {
   private socket: WebSocket | null = null;
 
+  private socketGeneration = 0;
+
   private listeners: Record<RelayEventName, Array<(...args: unknown[]) => void>> = {
     ready: [],
     message: [],
@@ -58,10 +60,31 @@ export class RelayService {
     this.activeOptions = options;
     this.emit("presence", "connecting");
 
-    const socketUrl = `${options.relayUrl.replace(/\/+$/, "")}/${options.sessionId}`;
+    if (this.reconnectTimer) {
+      clearTimeout(this.reconnectTimer);
+      this.reconnectTimer = null;
+    }
+
+    // Ensure there is only one active iPhone socket at a time.
+    if (this.socket && this.socket.readyState !== WebSocket.CLOSED) {
+      const previousSocket = this.socket;
+      previousSocket.onclose = null;
+      previousSocket.onerror = null;
+      try {
+        previousSocket.close(1000, "Replaced by newer connection");
+      } catch {
+        // Ignore close errors from stale sockets.
+      }
+    }
+
+    const baseUrl = `${options.relayUrl.replace(/\/+$/, "")}/${options.sessionId}`;
+    const socketUrl = baseUrl.includes("?")
+      ? `${baseUrl}&role=iphone`
+      : `${baseUrl}?role=iphone`;
     // React Native WebSocket does not support custom headers in a typed-compatible way.
     // The relay role currently falls back to server-side behavior for mobile clients.
     const socket = new WebSocket(socketUrl);
+    const generation = ++this.socketGeneration;
 
     this.socket = socket;
     this.handshakeDone = false;
@@ -121,6 +144,11 @@ export class RelayService {
     };
 
     socket.onclose = (event) => {
+      // Ignore stale socket lifecycle events from replaced connections.
+      if (this.socket !== socket || generation !== this.socketGeneration) {
+        return;
+      }
+
       this.emit("presence", "offline");
 
       // 4002 is expected when desktop is offline; keep retrying.
@@ -135,6 +163,10 @@ export class RelayService {
     };
 
     socket.onerror = () => {
+      if (this.socket !== socket || generation !== this.socketGeneration) {
+        return;
+      }
+
       this.emit("presence", "offline");
       this.scheduleReconnect();
     };
@@ -173,8 +205,12 @@ export class RelayService {
       clearTimeout(this.reconnectTimer);
       this.reconnectTimer = null;
     }
+    this.activeOptions = null;
+    this.socketGeneration += 1;
     this.socket?.close();
     this.socket = null;
+    this.handshakeDone = false;
+    this.aesKey = null;
     this.emit("presence", "offline");
   }
 
