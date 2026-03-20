@@ -1,50 +1,28 @@
 // FILE: server.js
-// Purpose: Hosts the public Remodex relay plus optional push-notification HTTP endpoints.
+// Purpose: Hosts the public Remodex relay transport and trusted-session resolve endpoint.
 // Layer: Standalone server entrypoint
 // Exports: createRelayServer, createFixedWindowRateLimiter
-// Depends on: http, ws, ./relay, ./push-service
+// Depends on: http, ws, ./relay
 
 const http = require("http");
 const { WebSocketServer } = require("ws");
 const {
   setupRelay,
   getRelayStats,
-  hasAuthenticatedMacSession,
   resolveTrustedMacSession,
 } = require("./relay");
-const { createPushSessionService } = require("./push-service");
 
 function createRelayServer({
-  enablePushService = false,
   exposeDetailedHealth = false,
   httpRateLimiter = createFixedWindowRateLimiter({ windowMs: 60_000, maxRequests: 120 }),
-  pushRateLimiter = createFixedWindowRateLimiter({ windowMs: 60_000, maxRequests: 30 }),
   upgradeRateLimiter = createFixedWindowRateLimiter({ windowMs: 60_000, maxRequests: 60 }),
-  pushSessionService,
   relayOptions = {},
   trustProxy = false,
 } = {}) {
-  const pushEnabled = Boolean(enablePushService || pushSessionService);
-  const resolvedPushSessionService = pushEnabled
-    ? (pushSessionService || createPushSessionService({
-      // The first registration must match the live bridge's secret, not just the session id.
-      canRegisterSession({ sessionId, notificationSecret }) {
-        return hasAuthenticatedMacSession(sessionId, notificationSecret);
-      },
-      // Completion pushes are only valid while the Mac side of that relay session is still live.
-      canNotifyCompletion({ sessionId, notificationSecret }) {
-        return hasAuthenticatedMacSession(sessionId, notificationSecret);
-      },
-    }))
-    : createDisabledPushSessionService();
-
   const server = http.createServer((req, res) => {
     void handleHTTPRequest(req, res, {
       exposeDetailedHealth,
       httpRateLimiter,
-      pushEnabled,
-      pushRateLimiter,
-      pushSessionService: resolvedPushSessionService,
       trustProxy,
     });
   });
@@ -83,16 +61,12 @@ function createRelayServer({
   return {
     server,
     wss,
-    pushSessionService: resolvedPushSessionService,
   };
 }
 
 async function handleHTTPRequest(req, res, {
   exposeDetailedHealth,
   httpRateLimiter,
-  pushEnabled,
-  pushRateLimiter,
-  pushSessionService,
   trustProxy,
 }) {
   const pathname = safePathname(req.url);
@@ -104,7 +78,9 @@ async function handleHTTPRequest(req, res, {
         ? {
             ok: true,
             relay: getRelayStats(),
-            push: pushSessionService.getStats(),
+            push: {
+              enabled: false,
+            },
           }
         : { ok: true }
     );
@@ -115,30 +91,17 @@ async function handleHTTPRequest(req, res, {
     return writeRateLimitResponse(res);
   }
 
-  if (req.method === "POST" && pathname === "/v1/push/session/register-device") {
-    if (!pushEnabled) {
-      return writeJSON(res, 404, {
-        ok: false,
-        error: "Not found",
-      });
-    }
-    if (!pushRateLimiter.allow(`${requestKey}:register-device`)) {
-      return writeRateLimitResponse(res);
-    }
-    return handleJSONRoute(req, res, async (body) => pushSessionService.registerDevice(body));
-  }
-
-  if (req.method === "POST" && pathname === "/v1/push/session/notify-completion") {
-    if (!pushEnabled) {
-      return writeJSON(res, 404, {
-        ok: false,
-        error: "Not found",
-      });
-    }
-    if (!pushRateLimiter.allow(`${requestKey}:notify-completion`)) {
-      return writeRateLimitResponse(res);
-    }
-    return handleJSONRoute(req, res, async (body) => pushSessionService.notifyCompletion(body));
+  if (
+    req.method === "POST"
+    && (
+      pathname === "/v1/push/session/register-device"
+      || pathname === "/v1/push/session/notify-completion"
+    )
+  ) {
+    return writeJSON(res, 404, {
+      ok: false,
+      error: "Not found",
+    });
   }
 
   if (req.method === "POST" && pathname === "/v1/trusted/session/resolve") {
@@ -217,19 +180,6 @@ function writeRateLimitResponse(res) {
     error: "Too many requests",
     code: "rate_limited",
   });
-}
-
-function createDisabledPushSessionService() {
-  return {
-    getStats() {
-      return {
-        enabled: false,
-        registeredSessions: 0,
-        deliveredDedupeKeys: 0,
-        apnsConfigured: false,
-      };
-    },
-  };
 }
 
 function safePathname(rawUrl) {
@@ -354,7 +304,10 @@ if (require.main === module) {
   const enablePushService = readOptionalBooleanEnv(
     ["REMODEX_ENABLE_PUSH_SERVICE", "PHODEX_ENABLE_PUSH_SERVICE"]
   ) ?? false;
-  const { server } = createRelayServer({ enablePushService, trustProxy });
+  if (enablePushService) {
+    console.warn("[relay] push service is not enabled in this fork; ignoring REMODEX_ENABLE_PUSH_SERVICE.");
+  }
+  const { server } = createRelayServer({ trustProxy });
   server.listen(port, () => {
     console.log(`[relay] listening on :${port}`);
   });

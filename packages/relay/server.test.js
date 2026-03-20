@@ -49,7 +49,7 @@ test("push routes stay disabled until explicitly enabled", async () => {
   assert.equal(body.error, "Not found");
 });
 
-test("push routes are rate limited", async () => {
+test("push routes remain unavailable even if push env flags are set", async () => {
   const { body, status } = await withServer(async ({ port }) => {
     const response = await fetch(`http://127.0.0.1:${port}/v1/push/session/register-device`, {
       method: "POST",
@@ -61,100 +61,12 @@ test("push routes are rate limited", async () => {
       status: response.status,
     };
   }, {
-    enablePushService: true,
-    pushRateLimiter: {
-      allow() {
-        return false;
-      },
-    },
-  });
-
-  assert.equal(status, 429);
-  assert.equal(body.code, "rate_limited");
-});
-
-test("push registration requires the live mac notification secret", async () => {
-  await withServer(async ({ port }) => {
-    const mac = new WebSocket(`ws://127.0.0.1:${port}/relay/session-push`, {
-      headers: {
-        "x-role": "mac",
-        "x-notification-secret": "bridge-secret",
-      },
-    });
-    await onceOpen(mac);
-
-    const rejected = await fetch(`http://127.0.0.1:${port}/v1/push/session/register-device`, {
-      method: "POST",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify({
-        sessionId: "session-push",
-        notificationSecret: "wrong-secret",
-        deviceToken: "aabbcc",
-        alertsEnabled: true,
-      }),
-    });
-    assert.equal(rejected.status, 403);
-
-    const accepted = await fetch(`http://127.0.0.1:${port}/v1/push/session/register-device`, {
-      method: "POST",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify({
-        sessionId: "session-push",
-        notificationSecret: "bridge-secret",
-        deviceToken: "aabbcc",
-        alertsEnabled: true,
-      }),
-    });
-    assert.equal(accepted.status, 200);
-
-    const macClosed = onceClosed(mac);
-    mac.close();
-    await macClosed;
-  }, {
+    // This fork keeps push endpoints disabled even when callers pass legacy flags.
     enablePushService: true,
   });
-});
 
-test("completion pushes are rejected after the mac relay session disconnects", async () => {
-  await withServer(async ({ port }) => {
-    const mac = new WebSocket(`ws://127.0.0.1:${port}/relay/session-push-completion`, {
-      headers: {
-        "x-role": "mac",
-        "x-notification-secret": "bridge-secret",
-      },
-    });
-    await onceOpen(mac);
-
-    const accepted = await fetch(`http://127.0.0.1:${port}/v1/push/session/register-device`, {
-      method: "POST",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify({
-        sessionId: "session-push-completion",
-        notificationSecret: "bridge-secret",
-        deviceToken: "aabbcc",
-        alertsEnabled: true,
-      }),
-    });
-    assert.equal(accepted.status, 200);
-
-    const macClosed = onceClosed(mac);
-    mac.close();
-    await macClosed;
-
-    const rejected = await fetch(`http://127.0.0.1:${port}/v1/push/session/notify-completion`, {
-      method: "POST",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify({
-        sessionId: "session-push-completion",
-        notificationSecret: "bridge-secret",
-        threadId: "thread-1",
-        dedupeKey: "done-after-disconnect",
-      }),
-    });
-    assert.equal(rejected.status, 403);
-  }, {
-    enablePushService: true,
-  });
+  assert.equal(status, 404);
+  assert.equal(body.error, "Not found");
 });
 
 test("trusted session resolve returns the current live session for a trusted iphone", async () => {

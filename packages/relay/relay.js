@@ -47,7 +47,7 @@ function setupRelay(
     const urlPath = req.url || "";
     const match = urlPath.match(/^\/relay\/([^/?]+)/);
     const sessionId = match?.[1];
-    const role = req.headers["x-role"];
+    const role = readRoleFromRequest(req);
 
     if (!sessionId || (role !== "mac" && role !== "iphone")) {
       ws.close(4000, "Missing sessionId or invalid x-role header");
@@ -180,6 +180,30 @@ function setupRelay(
       );
     });
   });
+}
+
+function readRoleFromRequest(req) {
+  const headerRole = readHeaderString(req?.headers?.["x-role"]);
+  if (headerRole === "mac" || headerRole === "iphone") {
+    return headerRole;
+  }
+
+  try {
+    const url = new URL(req?.url || "/", "http://localhost");
+    const queryRole = readHeaderString(url.searchParams.get("role"));
+    if (queryRole === "mac" || queryRole === "iphone") {
+      return queryRole;
+    }
+  } catch {
+    // Ignore malformed urls and return empty role so normal validation rejects it.
+  }
+
+  return "";
+}
+
+function readHeaderString(value) {
+  const candidate = Array.isArray(value) ? value[0] : value;
+  return typeof candidate === "string" && candidate.trim() ? candidate.trim() : "";
 }
 
 function scheduleCleanup(sessionId, { setTimeoutFn = setTimeout } = {}) {
