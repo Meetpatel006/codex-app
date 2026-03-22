@@ -11,7 +11,8 @@ import {
 
 import { MessageBubble } from "@/components/MessageBubble";
 import { PresenceIndicator } from "@/components/PresenceIndicator";
-import { ProjectSidebar } from "@/components/ProjectSidebar";
+import { SessionTranscriptLoader } from "@/components/SessionTranscriptLoader";
+import { ProjectSidebar } from "../components/ProjectSidebar";
 import { buildRequest } from "@/services/jsonrpc";
 import { relayService } from "@/services/relay";
 import { useChatStore } from "@/store/chat";
@@ -20,6 +21,7 @@ import { useSessionStore } from "@/store/session";
 type CodexSessionSummary = {
   sessionId?: string;
   threadId?: string;
+  title?: string;
   cwd?: string;
   updatedAtMs?: number;
   rolloutPath?: string;
@@ -81,9 +83,18 @@ function mapCodexSessionsToProjects(sessions: CodexSessionSummary[]) {
     }
 
     project.createdAt = Math.min(project.createdAt, lastActiveAt);
+    const normalizedTitle = sanitizeSessionTitle(session.title || "");
+    if (!normalizedTitle) {
+      console.log("[mobile][codex/sessions/list] Untitled chat fallback", {
+        sessionId: rawSessionId,
+        rolloutPath: session.rolloutPath || "",
+        projectName,
+        rawTitlePreview: String(session.title || "").slice(0, 180),
+      });
+    }
     project.sessions.push({
       id: sessionKey,
-      name: `Session ${rawSessionId.slice(0, 8)}`,
+      name: normalizedTitle || "Untitled chat",
       createdAt: lastActiveAt,
       lastActiveAt,
     });
@@ -99,6 +110,81 @@ function mapCodexSessionsToProjects(sessions: CodexSessionSummary[]) {
       const rhsLatest = rhs.sessions[0]?.lastActiveAt || rhs.createdAt;
       return rhsLatest - lhsLatest;
     });
+}
+
+function sanitizeSessionTitle(rawTitle: string) {
+  const lines = String(rawTitle || "")
+    .split(/\r?\n/)
+    .map((line) => line.trim())
+    .filter(Boolean);
+
+  for (const line of lines) {
+    if (isNoiseTitleLine(line)) {
+      continue;
+    }
+
+    if (isLowSignalTitleLine(line)) {
+      continue;
+    }
+
+    const compact = line.replace(/\s+/g, " ").trim();
+    if (!compact) {
+      continue;
+    }
+
+    return compact.length <= 64 ? compact : `${compact.slice(0, 63)}…`;
+  }
+
+  return "";
+}
+
+function isNoiseTitleLine(line: string) {
+  const normalized = line.trim();
+  if (!normalized) {
+    return true;
+  }
+
+  if (normalized.startsWith("# AGENTS.md instructions for")) {
+    return true;
+  }
+
+  const lowered = normalized.toLowerCase();
+  if (
+    lowered.startsWith("<environment_context>")
+    || lowered.startsWith("<permissions instructions>")
+    || lowered.startsWith("<app-context>")
+    || lowered.startsWith("<collaboration_mode>")
+    || lowered.startsWith("filesystem sandboxing")
+    || lowered.startsWith("approved command prefixes")
+    || lowered.startsWith("the writable roots are")
+  ) {
+    return true;
+  }
+
+  if (normalized.startsWith("<") && normalized.includes(">")) {
+    return true;
+  }
+
+  return false;
+}
+
+function isLowSignalTitleLine(line: string) {
+  const normalized = line
+    .toLowerCase()
+    .replace(/[^a-z0-9\s]/g, "")
+    .replace(/\s+/g, " ")
+    .trim();
+
+  return (
+    normalized === "hi"
+    || normalized === "hello"
+    || normalized === "hey"
+    || normalized === "ok"
+    || normalized === "okay"
+    || normalized === "yo"
+    || normalized === "test"
+    || normalized === "ping"
+  );
 }
 
 function normalizePathKey(input: string) {
@@ -123,6 +209,7 @@ function humanizeProjectName(cwd: string) {
 export default function ChatScreen() {
   const [input, setInput] = useState("");
   const [assistantMessageId, setAssistantMessageId] = useState<string | null>(null);
+  const [sessionLoadTick, setSessionLoadTick] = useState(0);
 
   const pairing = useSessionStore((state) => state.pairing);
   const loadSession = useSessionStore((state) => state.load);
@@ -326,11 +413,18 @@ export default function ChatScreen() {
 
   return (
     <View style={styles.container}>
+      <SessionTranscriptLoader sessionRef={activeSessionId} loadTick={sessionLoadTick} />
+
       <ProjectSidebar
         isOpen={sidebarOpen}
         onClose={() => setSidebarOpen(false)}
-        onProjectSelect={(projectId) => console.log('Project selected:', projectId)}
-        onSessionSelect={(projectId, sessionId) => console.log('Session selected:', projectId, sessionId)}
+        onProjectSelect={(projectId) => {
+          console.log("[mobile][sidebar] project selected", { projectId });
+        }}
+        onSessionSelect={(projectId, sessionId) => {
+          console.log("[mobile][sidebar] session selected", { projectId, sessionId });
+          setSessionLoadTick((value) => value + 1);
+        }}
       />
 
       <View style={styles.header}>

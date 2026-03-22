@@ -11,6 +11,7 @@ type ChatStore = {
   presence: "online" | "offline" | "connecting";
   messages: ChatMessage[];
   setPresence: (presence: ChatStore["presence"]) => void;
+  replaceMessages: (messages: ChatMessage[]) => void;
   addUserMessage: (text: string) => void;
   appendAssistantDelta: (id: string, delta: string) => void;
   completeAssistantMessage: (id: string) => void;
@@ -21,6 +22,9 @@ export const useChatStore = create<ChatStore>((set) => ({
   messages: [],
   setPresence(presence) {
     set({ presence });
+  },
+  replaceMessages(messages) {
+    set({ messages });
   },
   addUserMessage(text) {
     const id = `user-${Date.now()}`;
