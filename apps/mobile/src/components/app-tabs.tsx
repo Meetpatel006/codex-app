@@ -49,11 +49,11 @@ export default function AppTabs() {
             />
           </NativeTabs.Trigger>
 
-          <NativeTabs.Trigger name="session">
-            <NativeTabs.Trigger.Label>Session</NativeTabs.Trigger.Label>
+          <NativeTabs.Trigger name="diff">
+            <NativeTabs.Trigger.Label>Diff</NativeTabs.Trigger.Label>
             <NativeTabs.Trigger.Icon
-              sf={{ default: 'link.circle', selected: 'link.circle.fill' }}
-              md="link"
+              sf={{ default: 'doc.text.magnifyingglass', selected: 'doc.text.magnifyingglass' }}
+              md="difference"
             />
           </NativeTabs.Trigger>
 

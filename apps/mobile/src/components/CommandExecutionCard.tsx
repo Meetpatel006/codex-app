@@ -32,6 +32,7 @@ export function CommandExecutionCard({
 
   const accentColor = getAccentColor(status);
   const statusText = getStatusText(status);
+  const outputPreview = buildOutputPreview(output);
 
   return (
     <>
@@ -51,6 +52,13 @@ export function CommandExecutionCard({
           <Text style={styles.command} numberOfLines={2}>
             {command}
           </Text>
+          {outputPreview ? (
+            <View style={styles.previewBlock}>
+              <Text style={styles.previewText} numberOfLines={6}>
+                {outputPreview}
+              </Text>
+            </View>
+          ) : null}
         </View>
       </Pressable>
 
@@ -185,6 +193,18 @@ function formatDuration(ms: number): string {
   return `${seconds}s`;
 }
 
+function buildOutputPreview(output?: string) {
+  if (!output) {
+    return "";
+  }
+
+  return output
+    .split("\n")
+    .filter((line) => line.trim().length > 0)
+    .slice(-8)
+    .join("\n");
+}
+
 const styles = StyleSheet.create({
   card: {
     flexDirection: "row",
@@ -210,6 +230,21 @@ const styles = StyleSheet.create({
   command: {
     color: "#f5f5f5",
     fontSize: 14,
+    fontFamily: "monospace",
+  },
+  previewBlock: {
+    marginTop: 8,
+    backgroundColor: "#121212",
+    borderRadius: 6,
+    borderWidth: 1,
+    borderColor: "#262626",
+    paddingHorizontal: 8,
+    paddingVertical: 7,
+  },
+  previewText: {
+    color: "#cfcfcf",
+    fontSize: 11,
+    lineHeight: 16,
     fontFamily: "monospace",
   },
 

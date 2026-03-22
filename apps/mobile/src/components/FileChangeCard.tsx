@@ -1,4 +1,5 @@
 import React, { useState } from "react";
+import { router } from "expo-router";
 import {
   Modal,
   Pressable,
@@ -7,6 +8,9 @@ import {
   Text,
   View,
 } from "react-native";
+import { useDiffStore } from "@/store/diff";
+import { useSessionStore } from "@/store/session";
+import { parseUnifiedDiff } from "@/utils/diff";
 import { DiffBlockView } from "./DiffBlockView";
 
 type FileAction = "created" | "edited" | "deleted" | "renamed" | "moved";
@@ -26,6 +30,9 @@ type Props = {
 
 export function FileChangeCard({ changes }: Props) {
   const [selectedFile, setSelectedFile] = useState<FileChange | null>(null);
+  const activeSessionId = useSessionStore((state) => state.activeSessionId);
+  const setDiffSnapshot = useDiffStore((state) => state.setDiffSnapshot);
+  const selectFile = useDiffStore((state) => state.selectFile);
 
   // Group changes by action
   const groupedChanges = changes.reduce(
@@ -39,6 +46,25 @@ export function FileChangeCard({ changes }: Props) {
     },
     {} as Record<FileAction, FileChange[]>,
   );
+
+  function openInDiffPanel(file: FileChange) {
+    if (!activeSessionId || !file.diff) {
+      return;
+    }
+
+    const parsedFiles = parseUnifiedDiff(file.diff);
+    if (parsedFiles.length === 0) {
+      return;
+    }
+
+    setDiffSnapshot(activeSessionId, parsedFiles, {
+      preserveSelection: false,
+    });
+    const matchedFile =
+      parsedFiles.find((item) => item.path === file.path) || parsedFiles[0];
+    selectFile(activeSessionId, matchedFile.id);
+    router.navigate("/diff");
+  }
 
   return (
     <>
@@ -69,9 +95,15 @@ export function FileChangeCard({ changes }: Props) {
                   </View>
                 )}
                 {file.diff && (
-                  <View style={styles.diffButton}>
-                    <Text style={styles.diffButtonText}>Diff</Text>
-                  </View>
+                  <Pressable
+                    style={styles.diffButton}
+                    onPress={(event) => {
+                      event.stopPropagation();
+                      openInDiffPanel(file);
+                    }}
+                  >
+                    <Text style={styles.diffButtonText}>Open</Text>
+                  </Pressable>
                 )}
               </Pressable>
             ))}
@@ -106,7 +138,11 @@ export function FileChangeCard({ changes }: Props) {
 
             <ScrollView style={styles.modalContent}>
               {selectedFile.diff && (
-                <DiffBlockView language="diff" code={selectedFile.diff} />
+                <DiffBlockView
+                  language="diff"
+                  code={selectedFile.diff}
+                  onOpenDiff={() => openInDiffPanel(selectedFile)}
+                />
               )}
             </ScrollView>
           </View>

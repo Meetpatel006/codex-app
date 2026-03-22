@@ -1,4 +1,5 @@
 import React from "react";
+import { router } from "expo-router";
 import { StyleSheet, Text, View } from "react-native";
 import { CodeBlockView } from "./CodeBlockView";
 import { CommandExecutionCard } from "./CommandExecutionCard";
@@ -11,6 +12,9 @@ import {
   parseMarkdownSegments,
 } from "@/utils/markdown-parser";
 import type { CommandExecutionData, FileChangeData } from "@/store/chat";
+import { useDiffStore } from "@/store/diff";
+import { useSessionStore } from "@/store/session";
+import { parseUnifiedDiff } from "@/utils/diff";
 
 type Props = {
   role: "user" | "assistant" | "system";
@@ -35,6 +39,24 @@ export function MessageBubble({
   const isUser = role === "user";
   const isAssistant = role === "assistant";
   const isSystem = role === "system";
+  const activeSessionId = useSessionStore((state) => state.activeSessionId);
+  const setDiffSnapshot = useDiffStore((state) => state.setDiffSnapshot);
+
+  function openAssistantDiff(diffText: string) {
+    if (!activeSessionId) {
+      return;
+    }
+
+    const parsedFiles = parseUnifiedDiff(diffText);
+    if (parsedFiles.length === 0) {
+      return;
+    }
+
+    setDiffSnapshot(activeSessionId, parsedFiles, {
+      preserveSelection: false,
+    });
+    router.navigate("/diff");
+  }
 
   // Render user message
   if (isUser) {
@@ -134,6 +156,7 @@ export function MessageBubble({
                   key={index}
                   language={segment.language}
                   code={segment.content}
+                  onOpenDiff={() => openAssistantDiff(segment.content)}
                 />
               );
             }

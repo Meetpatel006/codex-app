@@ -21,7 +21,9 @@ import { SessionTranscriptLoader } from "@/components/SessionTranscriptLoader";
 import { ProjectSidebar } from "../components/ProjectSidebar";
 import { buildRequest } from "@/services/jsonrpc";
 import { relayService } from "@/services/relay";
-import { useChatStore, type FileChangeData } from "@/store/chat";
+import { useChatStore } from "@/store/chat";
+import { useDiffStore } from "@/store/diff";
+import { parseUnifiedDiff } from "@/utils/diff";
 import { useSessionStore } from "@/store/session";
 
 type CodexSessionSummary = {
@@ -37,6 +39,13 @@ type CodexSessionsListResult = {
   sessions?: CodexSessionSummary[];
 };
 
+type UpsertSystemMessageFn = (
+  id: string,
+  text: string,
+  kind?: "thinking" | "file-change" | "plan" | "command-execution" | "normal",
+  options?: { append?: boolean; streaming?: boolean },
+) => void;
+
 function mapCodexSessionsToProjects(sessions: CodexSessionSummary[]) {
   const byProject = new Map<
     string,
@@ -45,12 +54,12 @@ function mapCodexSessionsToProjects(sessions: CodexSessionSummary[]) {
       name: string;
       description?: string;
       createdAt: number;
-      sessions: Array<{
+      sessions: {
         id: string;
         name: string;
         createdAt: number;
         lastActiveAt: number;
-      }>;
+      }[];
     }
   >();
 
@@ -220,74 +229,6 @@ function humanizeProjectName(cwd: string) {
   return parts[parts.length - 1];
 }
 
-/**
- * Parse diff text to extract file changes
- * Simplified parser for diff format
- */
-function parseDiffText(diffText: string): FileChangeData[] {
-  const changes: FileChangeData[] = [];
-  const lines = diffText.split("\n");
-
-  let currentFile: FileChangeData | null = null;
-  let additions = 0;
-  let deletions = 0;
-  let diffLines: string[] = [];
-
-  for (const line of lines) {
-    // Match diff --git lines
-    const diffMatch = line.match(/^diff --git a\/(.+) b\/(.+)$/);
-    if (diffMatch) {
-      // Save previous file if exists
-      if (currentFile) {
-        currentFile.additions = additions;
-        currentFile.deletions = deletions;
-        currentFile.diff = diffLines.join("\n");
-        changes.push(currentFile);
-      }
-
-      // Start new file
-      currentFile = {
-        path: diffMatch[2],
-        action: "edited",
-      };
-      additions = 0;
-      deletions = 0;
-      diffLines = [line];
-      continue;
-    }
-
-    if (currentFile) {
-      diffLines.push(line);
-
-      // Count additions and deletions
-      if (line.startsWith("+") && !line.startsWith("+++")) {
-        additions++;
-      } else if (line.startsWith("-") && !line.startsWith("---")) {
-        deletions++;
-      }
-
-      // Detect file creation/deletion
-      if (line.startsWith("new file mode")) {
-        currentFile.action = "created";
-      } else if (line.startsWith("deleted file mode")) {
-        currentFile.action = "deleted";
-      } else if (line.startsWith("rename from")) {
-        currentFile.action = "renamed";
-      }
-    }
-  }
-
-  // Save last file
-  if (currentFile) {
-    currentFile.additions = additions;
-    currentFile.deletions = deletions;
-    currentFile.diff = diffLines.join("\n");
-    changes.push(currentFile);
-  }
-
-  return changes;
-}
-
 export default function ChatScreen() {
   const [input, setInput] = useState("");
   const [assistantMessageId, setAssistantMessageId] = useState<string | null>(
@@ -313,6 +254,8 @@ export default function ChatScreen() {
   const activeProjectId = useSessionStore((state) => state.activeProjectId);
   const activeSessionId = useSessionStore((state) => state.activeSessionId);
   const [sidebarOpen, setSidebarOpen] = useState(false);
+  const setActiveDiffSession = useDiffStore((state) => state.setActiveSession);
+  const setDiffSnapshot = useDiffStore((state) => state.setDiffSnapshot);
 
   const presence = useChatStore((state) => state.presence);
   const messages = useChatStore((state) => state.messages);
@@ -324,7 +267,17 @@ export default function ChatScreen() {
   const completeAssistantMessage = useChatStore(
     (state) => state.completeAssistantMessage,
   );
-  const upsertSystemMessage = useChatStore((state) => state.upsertSystemMessage);
+  const addSystemMessage = useChatStore((state) => state.addSystemMessage);
+  const maybeUpsertSystemMessage = useChatStore(
+    (state) =>
+      (state as unknown as { upsertSystemMessage?: UpsertSystemMessageFn })
+        .upsertSystemMessage,
+  );
+  const upsertSystemMessage: UpsertSystemMessageFn =
+    maybeUpsertSystemMessage ||
+    ((_id, text, kind) => {
+      addSystemMessage(text, kind);
+    });
   const updateMessageDeliveryState = useChatStore(
     (state) => state.updateMessageDeliveryState,
   );
@@ -344,6 +297,10 @@ export default function ChatScreen() {
   useEffect(() => {
     void loadSession();
   }, [loadSession]);
+
+  useEffect(() => {
+    setActiveDiffSession(activeSessionId);
+  }, [activeSessionId, setActiveDiffSession]);
 
   const refreshCodexSessions = useCallback(async () => {
     if (!relayService.isSecureReady()) {
@@ -647,13 +604,22 @@ export default function ChatScreen() {
       // Handle turn diff updates (file changes)
       if (message.method === "turn/diff/updated" && message.params?.diff) {
         const diff = params?.diff || "";
-
-        // Parse diff to extract file changes
-        // This is a simplified version - you may need more sophisticated parsing
-        const fileChanges = parseDiffText(diff);
+        const parsedFiles = parseUnifiedDiff(diff);
+        const fileChanges = parsedFiles.map((file) => ({
+          path: file.path,
+          action: file.status,
+          additions: file.additions,
+          deletions: file.deletions,
+          diff: file.diff,
+        }));
 
         if (fileChanges.length > 0) {
           addFileChanges(fileChanges);
+          if (activeSessionId) {
+            setDiffSnapshot(activeSessionId, parsedFiles, {
+              preserveSelection: true,
+            });
+          }
         }
       }
 
@@ -662,8 +628,13 @@ export default function ChatScreen() {
         const delta = params?.delta || params?.textDelta || "";
 
         if (delta) {
-          // For now, just log - you could parse this for more detailed file changes
           console.log("[mobile][file-change]", delta);
+          const parsedFiles = parseUnifiedDiff(delta);
+          if (parsedFiles.length > 0 && activeSessionId) {
+            setDiffSnapshot(activeSessionId, parsedFiles, {
+              preserveSelection: true,
+            });
+          }
         }
       }
     });
@@ -682,7 +653,9 @@ export default function ChatScreen() {
     upsertSystemMessage,
     updateCommandExecution,
     addFileChanges,
+    activeSessionId,
     refreshCodexSessions,
+    setDiffSnapshot,
     setPresence,
   ]);
 

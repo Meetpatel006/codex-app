@@ -1,13 +1,14 @@
 import React from "react";
-import { StyleSheet, Text, View } from "react-native";
+import { Pressable, StyleSheet, Text, View } from "react-native";
 import { DiffLineKind, parseDiffLine } from "@/utils/markdown-parser";
 
 type Props = {
   language: string;
   code: string;
+  onOpenDiff?: () => void;
 };
 
-export function DiffBlockView({ language, code }: Props) {
+export function DiffBlockView({ language, code, onOpenDiff }: Props) {
   const lines = code.split("\n");
 
   return (
@@ -15,6 +16,11 @@ export function DiffBlockView({ language, code }: Props) {
       {/* Header */}
       <View style={styles.header}>
         <Text style={styles.languageLabel}>{language || "diff"}</Text>
+        {onOpenDiff && (
+          <Pressable onPress={onOpenDiff} style={styles.openButton}>
+            <Text style={styles.openButtonText}>Open in Diff</Text>
+          </Pressable>
+        )}
       </View>
 
       {/* Diff content */}
@@ -74,6 +80,9 @@ const styles = StyleSheet.create({
     marginVertical: 8,
   },
   header: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
     paddingHorizontal: 12,
     paddingVertical: 8,
     backgroundColor: "#1a1a1a",
@@ -83,6 +92,15 @@ const styles = StyleSheet.create({
     fontSize: 12,
     fontFamily: "monospace",
     textTransform: "lowercase",
+  },
+  openButton: {
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+  },
+  openButtonText: {
+    color: "#7fc7ff",
+    fontSize: 12,
+    fontWeight: "600",
   },
   diffContainer: {
     backgroundColor: "#141414",
