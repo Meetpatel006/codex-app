@@ -1,14 +1,22 @@
 import { useEffect } from "react";
 
 import { relayService } from "@/services/relay";
-import { type ChatMessage, useChatStore } from "@/store/chat";
+import {
+  type ChatMessage,
+  type CommandExecutionData,
+  type FileChangeData,
+  useChatStore,
+} from "@/store/chat";
 
 type SessionTranscriptResult = {
   chat?: Array<{
     id?: string;
-    role?: "user" | "assistant";
+    role?: "user" | "assistant" | "system";
+    kind?: ChatMessage["kind"];
     text?: string;
     timestamp?: string;
+    commandExecution?: CommandExecutionData;
+    fileChanges?: FileChangeData[];
   }>;
   rolloutPath?: string;
 };
@@ -49,8 +57,15 @@ export function SessionTranscriptLoader({ sessionRef, loadTick }: SessionTranscr
         const nextMessages: ChatMessage[] = [];
 
         transcript.forEach((item, index) => {
-          const role = item?.role === "assistant" ? "assistant" : item?.role === "user" ? "user" : "";
-          const text = typeof item?.text === "string" ? item.text.trim() : "";
+          const role =
+            item?.role === "assistant"
+              ? "assistant"
+              : item?.role === "user"
+                ? "user"
+                : item?.role === "system"
+                  ? "system"
+                  : "";
+          const text = typeof item?.text === "string" ? item.text : "";
           if (!role || !text) {
             return;
           }
@@ -60,6 +75,9 @@ export function SessionTranscriptLoader({ sessionRef, loadTick }: SessionTranscr
             role,
             text,
             isStreaming: false,
+            kind: item.kind || "normal",
+            commandExecution: item.commandExecution,
+            fileChanges: item.fileChanges,
           });
         });
 
