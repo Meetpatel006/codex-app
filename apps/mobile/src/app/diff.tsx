@@ -1,3 +1,4 @@
+import { Link } from "expo-router";
 import React, { useEffect, useState } from "react";
 import {
   FlatList,
@@ -8,11 +9,18 @@ import {
 } from "react-native";
 
 import { relayService } from "@/services/relay";
+import { GitCommitIcon, CodeDiffIcon } from "@/components/icons/Icon";
+import { Colors } from "@/constants/theme";
 import { useDiffStore } from "@/store/diff";
 import { useSessionStore } from "@/store/session";
 import { summarizeParsedDiff, type ParsedDiffHunk } from "@/utils/diff";
 import { parseUnifiedDiff } from "@/utils/diff";
-import { getGitCwd, requestGitDiff, requestGitStatus, type GitStatusResult } from "@/utils/git";
+import {
+  getGitCwd,
+  requestGitDiff,
+  requestGitStatus,
+  type GitStatusResult,
+} from "@/utils/git";
 
 export default function DiffScreen() {
   const projects = useSessionStore((state) => state.projects);
@@ -30,7 +38,9 @@ export default function DiffScreen() {
   const files = diffSession?.files ?? [];
   const summary = summarizeParsedDiff(files);
   const selectedFile =
-    files.find((file) => file.id === diffSession?.selectedFileId) || files[0] || null;
+    files.find((file) => file.id === diffSession?.selectedFileId) ||
+    files[0] ||
+    null;
   const activeProject =
     projects.find((project) => project.id === activeProjectId) || null;
   const gitCwd = getGitCwd(activeProject?.description);
@@ -86,6 +96,28 @@ export default function DiffScreen() {
     <View style={styles.container}>
       <View style={styles.titleRow}>
         <Text style={styles.title}>Diff Panel</Text>
+        <View style={styles.headerIcons}>
+          <Link href="/explore" asChild>
+            <Pressable
+              style={styles.headerIconButton}
+              accessibilityRole="link"
+              accessibilityLabel="Open git screen"
+              hitSlop={8}
+            >
+              <GitCommitIcon color={Colors.dark.text} size={20} />
+            </Pressable>
+          </Link>
+          <Link href="/diff" asChild>
+            <Pressable
+              style={styles.headerIconButton}
+              accessibilityRole="link"
+              accessibilityLabel="Open diff panel"
+              hitSlop={8}
+            >
+              <CodeDiffIcon color={Colors.dark.text} size={20} />
+            </Pressable>
+          </Link>
+        </View>
         <Pressable
           onPress={() => {
             if (activeSessionId && gitCwd && relayService.isSecureReady()) {
@@ -101,7 +133,9 @@ export default function DiffScreen() {
                   });
                 })
                 .catch((error) => {
-                  setLoadError(error instanceof Error ? error.message : String(error));
+                  setLoadError(
+                    error instanceof Error ? error.message : String(error),
+                  );
                 })
                 .finally(() => {
                   setIsRefreshing(false);
@@ -117,8 +151,16 @@ export default function DiffScreen() {
       </View>
       <View style={styles.summaryCard}>
         <SummaryPill label="Files" value={String(summary.files)} />
-        <SummaryPill label="Additions" value={`+${summary.additions}`} positive />
-        <SummaryPill label="Deletions" value={`-${summary.deletions}`} negative />
+        <SummaryPill
+          label="Additions"
+          value={`+${summary.additions}`}
+          positive
+        />
+        <SummaryPill
+          label="Deletions"
+          value={`-${summary.deletions}`}
+          negative
+        />
       </View>
       <View style={styles.statusSummaryRow}>
         <StatusPill label="Branch" value={gitStatus?.branch || "-"} />
@@ -152,10 +194,17 @@ export default function DiffScreen() {
           const selected = selectedFile?.id === item.id;
           return (
             <Pressable
-              onPress={() => activeSessionId && selectFile(activeSessionId, item.id)}
+              onPress={() =>
+                activeSessionId && selectFile(activeSessionId, item.id)
+              }
               style={[styles.fileChip, selected && styles.fileChipSelected]}
             >
-              <Text style={[styles.fileChipName, selected && styles.fileChipNameSelected]}>
+              <Text
+                style={[
+                  styles.fileChipName,
+                  selected && styles.fileChipNameSelected,
+                ]}
+              >
                 {item.path}
               </Text>
               <Text style={styles.fileChipStats}>
@@ -173,7 +222,8 @@ export default function DiffScreen() {
           <View style={styles.fileHeader}>
             <Text style={styles.fileTitle}>{selectedFile.path}</Text>
             <Text style={styles.fileMeta}>
-              {selectedFile.status.toUpperCase()}  +{selectedFile.additions} -{selectedFile.deletions}
+              {selectedFile.status.toUpperCase()} +{selectedFile.additions} -
+              {selectedFile.deletions}
             </Text>
           </View>
 
@@ -228,7 +278,8 @@ function StatusFilesFallback({
         </View>
       ))}
       <Text style={styles.fallbackHint}>
-        Patch view is unavailable for the selected state, but the current git status file list is shown.
+        Patch view is unavailable for the selected state, but the current git
+        status file list is shown.
       </Text>
     </View>
   );
@@ -274,14 +325,15 @@ function HunkCard({ hunk }: { hunk: ParsedDiffHunk }) {
     <View style={styles.hunkCard}>
       <Text style={styles.hunkHeader}>{hunk.header}</Text>
       {hunk.lines.map((line) => (
-        <View key={line.id} style={[styles.diffLine, getLineBackground(line.type)]}>
-          <Text style={styles.lineNumber}>
-            {line.oldLineNumber ?? ""}
+        <View
+          key={line.id}
+          style={[styles.diffLine, getLineBackground(line.type)]}
+        >
+          <Text style={styles.lineNumber}>{line.oldLineNumber ?? ""}</Text>
+          <Text style={styles.lineNumber}>{line.newLineNumber ?? ""}</Text>
+          <Text style={[styles.lineContent, getLineTextStyle(line.type)]}>
+            {line.content}
           </Text>
-          <Text style={styles.lineNumber}>
-            {line.newLineNumber ?? ""}
-          </Text>
-          <Text style={[styles.lineContent, getLineTextStyle(line.type)]}>{line.content}</Text>
         </View>
       ))}
     </View>
@@ -327,6 +379,23 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "space-between",
     marginBottom: 12,
+  },
+  headerIcons: {
+    flexDirection: "row",
+    gap: 8,
+    alignItems: "center",
+  },
+  headerIconButton: {
+    minWidth: 36,
+    minHeight: 36,
+    paddingHorizontal: 8,
+    paddingVertical: 6,
+    borderRadius: 8,
+    backgroundColor: "#1b1b1b",
+    borderWidth: 1,
+    borderColor: "#2d2d2d",
+    alignItems: "center",
+    justifyContent: "center",
   },
   refreshButton: {
     paddingHorizontal: 10,

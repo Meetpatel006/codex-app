@@ -1,18 +1,17 @@
-import { router } from "expo-router";
-import React, {
-  useCallback,
-  useEffect,
-  useRef,
-  useState,
-} from "react";
+import { Link, router } from "expo-router";
+import React, { useCallback, useEffect, useRef, useState } from "react";
 import { Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
 
 import { MessageBubble } from "@/components/MessageBubble";
 import { PresenceIndicator } from "@/components/PresenceIndicator";
 import { SessionTranscriptLoader } from "@/components/SessionTranscriptLoader";
-import { ProjectSidebar } from "../components/ProjectSidebar";
-import { PromptInput } from "../components/prompt-input";
-import { MenuIcon } from "../components/icons/Icon";
+import { ProjectSidebar } from "@/components/ProjectSidebar";
+import { PromptInput } from "@/components/prompt-input";
+import {
+  MenuIcon,
+  GitCommitIcon,
+  CodeDiffIcon,
+} from "@/components/icons/Icon";
 import { buildRequest } from "@/services/jsonrpc";
 import { relayService } from "@/services/relay";
 import { useChatStore } from "@/store/chat";
@@ -745,28 +744,71 @@ export default function ChatScreen() {
         setSessionLoadTick((value) => value + 1);
       }}
     >
-      <View style={[styles.container, { backgroundColor: theme.background }]}>
+      <View
+        style={StyleSheet.flatten([
+          styles.container,
+          { backgroundColor: theme.background },
+        ])}
+      >
         <SessionTranscriptLoader
           sessionRef={activeSessionId}
           loadTick={sessionLoadTick}
         />
 
-        <View style={styles.header}>
-          <Pressable
-            onPress={() => setSidebarOpen(true)}
-            style={[
-              styles.sessionButton,
-              {
-                backgroundColor: theme.backgroundElement,
-                borderColor: theme.backgroundSelected,
-              },
-            ]}
-            accessibilityLabel="Open sidebar"
-          >
-            <MenuIcon size={16} color={theme.text} />
-          </Pressable>
-          <Text style={[styles.title, { color: theme.text }]}>Chat</Text>
-          <PresenceIndicator status={presence} />
+        <View style={styles.headerBlock}>
+          <View style={styles.header}>
+            <Pressable
+              onPress={() => setSidebarOpen(true)}
+              style={[
+                styles.sessionButton,
+                {
+                  backgroundColor: theme.backgroundElement,
+                  borderColor: theme.backgroundSelected,
+                },
+              ]}
+              accessibilityLabel="Open sidebar"
+            >
+              <MenuIcon size={16} color={theme.text} />
+            </Pressable>
+            <Text style={[styles.title, { color: theme.text }]}>Chat</Text>
+            <View style={styles.headerIcons}>
+              <Link href="/explore" asChild>
+                <Pressable
+                  style={StyleSheet.flatten([
+                    styles.headerIconButton,
+                    {
+                      backgroundColor: theme.backgroundElement,
+                      borderColor: theme.backgroundSelected,
+                    },
+                  ])}
+                  accessibilityRole="link"
+                  accessibilityLabel="Open git screen"
+                  hitSlop={8}
+                >
+                  <GitCommitIcon size={20} color={theme.text} />
+                </Pressable>
+              </Link>
+              <Link href="/diff" asChild>
+                <Pressable
+                  style={StyleSheet.flatten([
+                    styles.headerIconButton,
+                    {
+                      backgroundColor: theme.backgroundElement,
+                      borderColor: theme.backgroundSelected,
+                    },
+                  ])}
+                  accessibilityRole="link"
+                  accessibilityLabel="Open diff panel"
+                  hitSlop={8}
+                >
+                  <CodeDiffIcon size={20} color={theme.text} />
+                </Pressable>
+              </Link>
+            </View>
+          </View>
+          <View style={styles.presenceRow}>
+            <PresenceIndicator status={presence} />
+          </View>
         </View>
 
         <ScrollView
@@ -799,13 +841,35 @@ const styles = StyleSheet.create({
     paddingTop: 48,
     gap: 10,
   },
-  header: {
-    flexDirection: "row",
-    justifyContent: "flex-start",
-    alignItems: "center",
-    gap: 12,
+  headerBlock: {
+    gap: 6,
     marginBottom: 8,
     paddingHorizontal: 10,
+  },
+  header: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    gap: 12,
+  },
+  headerIcons: {
+    flexDirection: "row",
+    gap: 8,
+    alignItems: "center",
+  },
+  presenceRow: {
+    flexDirection: "row",
+    justifyContent: "flex-end",
+  },
+  headerIconButton: {
+    minWidth: 36,
+    minHeight: 36,
+    paddingHorizontal: 8,
+    paddingVertical: 6,
+    borderRadius: 8,
+    borderWidth: 1,
+    alignItems: "center",
+    justifyContent: "center",
   },
   sessionButton: {
     paddingHorizontal: 10,
@@ -821,6 +885,7 @@ const styles = StyleSheet.create({
     fontSize: 20,
     fontWeight: "700",
     flex: 1,
+    minWidth: 0,
   },
   messages: {
     flex: 1,

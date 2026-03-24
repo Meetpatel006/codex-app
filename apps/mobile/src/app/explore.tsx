@@ -1,7 +1,17 @@
+import { Link } from "expo-router";
 import React, { useCallback, useEffect, useMemo, useState } from "react";
-import { Pressable, ScrollView, StyleSheet, Text, TextInput, View } from "react-native";
+import {
+  Pressable,
+  ScrollView,
+  StyleSheet,
+  Text,
+  TextInput,
+  View,
+} from "react-native";
 
 import { ProjectSidebar } from "@/components/ProjectSidebar";
+import { GitCommitIcon, CodeDiffIcon } from "@/components/icons/Icon";
+import { Colors } from "@/constants/theme";
 import { relayService } from "@/services/relay";
 import { useDiffStore } from "@/store/diff";
 import { useSessionStore } from "@/store/session";
@@ -15,7 +25,9 @@ import {
 
 export default function GitScreen() {
   const [commitMessage, setCommitMessage] = useState("WIP: mobile commit");
-  const [output, setOutput] = useState("Run git/status to load repository state.");
+  const [output, setOutput] = useState(
+    "Run git/status to load repository state.",
+  );
   const [status, setStatus] = useState<GitStatusResult | null>(null);
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [pendingAction, setPendingAction] = useState("");
@@ -34,7 +46,9 @@ export default function GitScreen() {
 
   const loadStatus = useCallback(async () => {
     if (!gitCwd) {
-      setOutput("Git actions require an active project with a local working directory.");
+      setOutput(
+        "Git actions require an active project with a local working directory.",
+      );
       return;
     }
 
@@ -87,11 +101,19 @@ export default function GitScreen() {
   }
 
   async function runGitAction(
-    method: "git/pull" | "git/push" | "git/stash" | "git/stashPop" | "git/branches" | "git/commit",
+    method:
+      | "git/pull"
+      | "git/push"
+      | "git/stash"
+      | "git/stashPop"
+      | "git/branches"
+      | "git/commit",
     params: Record<string, unknown> = {},
   ) {
     if (!gitCwd) {
-      setOutput("Git actions require an active project with a local working directory.");
+      setOutput(
+        "Git actions require an active project with a local working directory.",
+      );
       return;
     }
 
@@ -118,17 +140,45 @@ export default function GitScreen() {
       <ProjectSidebar
         isOpen={sidebarOpen}
         onClose={() => setSidebarOpen(false)}
-        onProjectSelect={(projectId) => console.log("Project selected:", projectId)}
+        onProjectSelect={(projectId) =>
+          console.log("Project selected:", projectId)
+        }
         onSessionSelect={(projectId, sessionId) =>
           console.log("Session selected:", projectId, sessionId)
         }
       />
 
       <View style={styles.header}>
-        <Pressable onPress={() => setSidebarOpen(true)} style={styles.sessionButton}>
+        <Pressable
+          onPress={() => setSidebarOpen(true)}
+          style={styles.sessionButton}
+        >
           <Text style={styles.sessionButtonText}>Sessions</Text>
         </Pressable>
         <Text style={styles.title}>Git</Text>
+        <View style={{ flex: 1 }} />
+        <View style={styles.headerIcons}>
+          <Link href="/explore" asChild>
+            <Pressable
+              style={styles.headerIconButton}
+              accessibilityRole="link"
+              accessibilityLabel="Open git screen"
+              hitSlop={8}
+            >
+              <GitCommitIcon color={Colors.dark.text} size={20} />
+            </Pressable>
+          </Link>
+          <Link href="/diff" asChild>
+            <Pressable
+              style={styles.headerIconButton}
+              accessibilityRole="link"
+              accessibilityLabel="Open diff panel"
+              hitSlop={8}
+            >
+              <CodeDiffIcon color={Colors.dark.text} size={20} />
+            </Pressable>
+          </Link>
+        </View>
       </View>
 
       <View style={styles.heroCard}>
@@ -137,18 +187,30 @@ export default function GitScreen() {
         </Text>
         <View style={styles.branchRow}>
           <Text style={styles.branchName}>{status?.branch || "-"}</Text>
-          <View style={[styles.stateBadge, status?.dirty ? styles.stateBadgeDirty : styles.stateBadgeClean]}>
-            <Text style={styles.stateBadgeText}>{status?.dirty ? "dirty" : "clean"}</Text>
+          <View
+            style={[
+              styles.stateBadge,
+              status?.dirty ? styles.stateBadgeDirty : styles.stateBadgeClean,
+            ]}
+          >
+            <Text style={styles.stateBadgeText}>
+              {status?.dirty ? "dirty" : "clean"}
+            </Text>
           </View>
         </View>
         <Text style={styles.statusMeta}>
-          {status?.tracking ? `Tracking ${status.tracking}` : "No upstream configured"}
+          {status?.tracking
+            ? `Tracking ${status.tracking}`
+            : "No upstream configured"}
         </Text>
       </View>
 
       <View style={styles.summaryGrid}>
         <SummaryCard label="State" value={formatGitState(status?.state)} />
-        <SummaryCard label="Changed" value={String(status?.files?.length || 0)} />
+        <SummaryCard
+          label="Changed"
+          value={String(status?.files?.length || 0)}
+        />
         <SummaryCard label="Ahead" value={String(status?.ahead || 0)} />
         <SummaryCard label="Behind" value={String(status?.behind || 0)} />
       </View>
@@ -156,8 +218,16 @@ export default function GitScreen() {
       <View style={styles.actionGroup}>
         <Text style={styles.sectionTitle}>Repository</Text>
         <View style={styles.row}>
-          <ActionButton label="Status" pending={pendingAction === "status"} onPress={() => void loadStatus()} />
-          <ActionButton label="Diff" pending={pendingAction === "diff"} onPress={() => void loadDiffIntoPanel()} />
+          <ActionButton
+            label="Status"
+            pending={pendingAction === "status"}
+            onPress={() => void loadStatus()}
+          />
+          <ActionButton
+            label="Diff"
+            pending={pendingAction === "diff"}
+            onPress={() => void loadDiffIntoPanel()}
+          />
           <ActionButton
             label="Branches"
             pending={pendingAction === "git/branches"}
@@ -169,9 +239,21 @@ export default function GitScreen() {
       <View style={styles.actionGroup}>
         <Text style={styles.sectionTitle}>Sync</Text>
         <View style={styles.row}>
-          <ActionButton label="Pull" pending={pendingAction === "git/pull"} onPress={() => void runGitAction("git/pull")} />
-          <ActionButton label="Push" pending={pendingAction === "git/push"} onPress={() => void runGitAction("git/push")} />
-          <ActionButton label="Stash" pending={pendingAction === "git/stash"} onPress={() => void runGitAction("git/stash")} />
+          <ActionButton
+            label="Pull"
+            pending={pendingAction === "git/pull"}
+            onPress={() => void runGitAction("git/pull")}
+          />
+          <ActionButton
+            label="Push"
+            pending={pendingAction === "git/push"}
+            onPress={() => void runGitAction("git/push")}
+          />
+          <ActionButton
+            label="Stash"
+            pending={pendingAction === "git/stash"}
+            onPress={() => void runGitAction("git/stash")}
+          />
           <ActionButton
             label="Stash Pop"
             pending={pendingAction === "git/stashPop"}
@@ -300,6 +382,23 @@ const styles = StyleSheet.create({
     alignItems: "center",
     gap: 12,
     marginBottom: 8,
+  },
+  headerIcons: {
+    flexDirection: "row",
+    gap: 8,
+    alignItems: "center",
+  },
+  headerIconButton: {
+    minWidth: 36,
+    minHeight: 36,
+    paddingHorizontal: 8,
+    paddingVertical: 6,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: "#3a3a3a",
+    backgroundColor: "#1a1a1a",
+    alignItems: "center",
+    justifyContent: "center",
   },
   sessionButton: {
     paddingHorizontal: 10,

@@ -92,6 +92,6 @@ const styles = StyleSheet.create({
   },
   leftGroup: {
     flexDirection: "row",
-    gap: 5,
+    gap: 1,
   },
 });
