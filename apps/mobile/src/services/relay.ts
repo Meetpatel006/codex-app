@@ -1,3 +1,4 @@
+import "react-native-get-random-values";
 import { ed25519 } from "@noble/curves/ed25519";
 import { x25519 } from "@noble/curves/ed25519";
 import { gcm } from "@noble/ciphers/aes.js";
@@ -45,7 +46,10 @@ export class RelayService {
 
   private socketGeneration = 0;
 
-  private listeners: Record<RelayEventName, Array<(...args: unknown[]) => void>> = {
+  private listeners: Record<
+    RelayEventName,
+    Array<(...args: unknown[]) => void>
+  > = {
     ready: [],
     message: [],
     presence: [],
@@ -86,7 +90,9 @@ export class RelayService {
   on<K extends RelayEventName>(event: K, listener: RelayEventMap[K]) {
     this.listeners[event].push(listener as (...args: unknown[]) => void);
     return () => {
-      this.listeners[event] = this.listeners[event].filter((item) => item !== listener);
+      this.listeners[event] = this.listeners[event].filter(
+        (item) => item !== listener,
+      );
     };
   }
 
@@ -135,29 +141,36 @@ export class RelayService {
     const phoneIdentityPublicKey = bytesToBase64(identityPublicKey);
     const phoneDeviceId = `phone-${bytesToHex(identityPublicKey).slice(0, 16)}`;
     const phoneEphemeralPrivateKey = x25519.utils.randomPrivateKey();
-    const phoneEphemeralPublicKey = x25519.getPublicKey(phoneEphemeralPrivateKey);
+    const phoneEphemeralPublicKey = x25519.getPublicKey(
+      phoneEphemeralPrivateKey,
+    );
     const clientNonce = randomBytes(32);
-    const phoneEphemeralPublicKeyBase64 = bytesToBase64(phoneEphemeralPublicKey);
+    const phoneEphemeralPublicKeyBase64 = bytesToBase64(
+      phoneEphemeralPublicKey,
+    );
 
     socket.onopen = () => {
       this.reconnectAttempts = 0;
       this.emit("presence", "connecting");
       console.log(`[mobile][relay] socket open session=${options.sessionId}`);
-      socket.send(JSON.stringify({
-        kind: "clientHello",
-        protocolVersion: SECURE_PROTOCOL_VERSION,
-        sessionId: options.sessionId,
-        handshakeMode: HANDSHAKE_MODE_QR_BOOTSTRAP,
-        phoneDeviceId,
-        phoneIdentityPublicKey,
-        phoneEphemeralPublicKey: phoneEphemeralPublicKeyBase64,
-        clientNonce: bytesToBase64(clientNonce),
-      }));
+      socket.send(
+        JSON.stringify({
+          kind: "clientHello",
+          protocolVersion: SECURE_PROTOCOL_VERSION,
+          sessionId: options.sessionId,
+          handshakeMode: HANDSHAKE_MODE_QR_BOOTSTRAP,
+          phoneDeviceId,
+          phoneIdentityPublicKey,
+          phoneEphemeralPublicKey: phoneEphemeralPublicKeyBase64,
+          clientNonce: bytesToBase64(clientNonce),
+        }),
+      );
     };
 
     socket.onmessage = async (event) => {
       try {
-        const raw = typeof event.data === "string" ? event.data : String(event.data);
+        const raw =
+          typeof event.data === "string" ? event.data : String(event.data);
         const maybeJson = parseJsonRpc(raw);
         if (maybeJson?.jsonrpc === "2.0") {
           console.log(
@@ -175,33 +188,54 @@ export class RelayService {
         const kind = typeof control.kind === "string" ? control.kind : "";
 
         if (kind === "secureError") {
-          const message = typeof control.message === "string" ? control.message : "Secure transport error.";
-          console.warn(`[mobile][relay] secureError kind=${kind} message=${message}`);
+          const message =
+            typeof control.message === "string"
+              ? control.message
+              : "Secure transport error.";
+          console.warn(
+            `[mobile][relay] secureError kind=${kind} message=${message}`,
+          );
           this.emit("error", new Error(message));
           return;
         }
 
         if (kind === "serverHello") {
           const protocolVersion = Number(control.protocolVersion);
-          const sessionId = typeof control.sessionId === "string" ? control.sessionId : "";
+          const sessionId =
+            typeof control.sessionId === "string" ? control.sessionId : "";
           const keyEpoch = Number(control.keyEpoch);
-          const macDeviceId = typeof control.macDeviceId === "string" ? control.macDeviceId : "";
+          const macDeviceId =
+            typeof control.macDeviceId === "string" ? control.macDeviceId : "";
           const macIdentityPublicKey =
-            typeof control.macIdentityPublicKey === "string" ? control.macIdentityPublicKey : "";
+            typeof control.macIdentityPublicKey === "string"
+              ? control.macIdentityPublicKey
+              : "";
           const macEphemeralPublicKey =
-            typeof control.macEphemeralPublicKey === "string" ? control.macEphemeralPublicKey : "";
-          const serverNonceBase64 = typeof control.serverNonce === "string" ? control.serverNonce : "";
-          const expiresAtForTranscript = Number(control.expiresAtForTranscript || 0);
-          const macSignature = typeof control.macSignature === "string" ? control.macSignature : "";
+            typeof control.macEphemeralPublicKey === "string"
+              ? control.macEphemeralPublicKey
+              : "";
+          const serverNonceBase64 =
+            typeof control.serverNonce === "string" ? control.serverNonce : "";
+          const expiresAtForTranscript = Number(
+            control.expiresAtForTranscript || 0,
+          );
+          const macSignature =
+            typeof control.macSignature === "string"
+              ? control.macSignature
+              : "";
 
-          if (protocolVersion !== SECURE_PROTOCOL_VERSION || sessionId !== options.sessionId || !macSignature) {
+          if (
+            protocolVersion !== SECURE_PROTOCOL_VERSION ||
+            sessionId !== options.sessionId ||
+            !macSignature
+          ) {
             throw new Error("Invalid serverHello payload.");
           }
 
           if (
-            options.bridgeIdentityPublicKey
-            && macIdentityPublicKey
-            && options.bridgeIdentityPublicKey !== macIdentityPublicKey
+            options.bridgeIdentityPublicKey &&
+            macIdentityPublicKey &&
+            options.bridgeIdentityPublicKey !== macIdentityPublicKey
           ) {
             throw new Error("Bridge identity does not match paired identity.");
           }
@@ -231,10 +265,18 @@ export class RelayService {
             throw new Error("Invalid server signature.");
           }
 
-          const clientAuthTranscript = concatBytes(transcript, encodeLengthPrefixedUtf8("client-auth"));
-          const phoneSignature = bytesToBase64(ed25519.sign(clientAuthTranscript, identityPrivateKey));
+          const clientAuthTranscript = concatBytes(
+            transcript,
+            encodeLengthPrefixedUtf8("client-auth"),
+          );
+          const phoneSignature = bytesToBase64(
+            ed25519.sign(clientAuthTranscript, identityPrivateKey),
+          );
 
-          const sharedSecret = x25519.getSharedSecret(phoneEphemeralPrivateKey, base64ToBytes(macEphemeralPublicKey));
+          const sharedSecret = x25519.getSharedSecret(
+            phoneEphemeralPrivateKey,
+            base64ToBytes(macEphemeralPublicKey),
+          );
           const salt = sha256(transcript);
           const infoPrefix = [
             HANDSHAKE_TAG,
@@ -253,20 +295,25 @@ export class RelayService {
           this.keyEpoch = keyEpoch;
           this.nextOutboundCounter = 0;
           this.lastInboundCounter = -1;
-          console.log(`[mobile][relay] serverHello verified keyEpoch=${keyEpoch} sending clientAuth`);
+          console.log(
+            `[mobile][relay] serverHello verified keyEpoch=${keyEpoch} sending clientAuth`,
+          );
 
-          socket.send(JSON.stringify({
-            kind: "clientAuth",
-            sessionId,
-            phoneDeviceId,
-            keyEpoch,
-            phoneSignature,
-          }));
+          socket.send(
+            JSON.stringify({
+              kind: "clientAuth",
+              sessionId,
+              phoneDeviceId,
+              keyEpoch,
+              phoneSignature,
+            }),
+          );
           return;
         }
 
         if (kind === "secureReady") {
-          const sessionId = typeof control.sessionId === "string" ? control.sessionId : "";
+          const sessionId =
+            typeof control.sessionId === "string" ? control.sessionId : "";
           const keyEpoch = Number(control.keyEpoch);
           if (sessionId !== options.sessionId || keyEpoch !== this.keyEpoch) {
             throw new Error("secureReady does not match active session.");
@@ -275,34 +322,39 @@ export class RelayService {
           this.handshakeDone = true;
           this.emit("presence", "online");
           console.log(`[mobile][relay] secureReady keyEpoch=${keyEpoch}`);
-          socket.send(JSON.stringify({
-            kind: "resumeState",
-            sessionId,
-            keyEpoch,
-            lastAppliedBridgeOutboundSeq: this.lastAppliedBridgeOutboundSeq,
-          }));
+          socket.send(
+            JSON.stringify({
+              kind: "resumeState",
+              sessionId,
+              keyEpoch,
+              lastAppliedBridgeOutboundSeq: this.lastAppliedBridgeOutboundSeq,
+            }),
+          );
           this.emit("ready");
           return;
         }
 
         if (kind === "encryptedEnvelope") {
-          const sender = typeof control.sender === "string" ? control.sender : "";
+          const sender =
+            typeof control.sender === "string" ? control.sender : "";
           const counter = Number(control.counter);
           const keyEpoch = Number(control.keyEpoch);
-          const sessionId = typeof control.sessionId === "string" ? control.sessionId : "";
+          const sessionId =
+            typeof control.sessionId === "string" ? control.sessionId : "";
           if (
-            sender !== SECURE_SENDER_MAC
-            || !this.macToPhoneKey
-            || !this.handshakeDone
-            || !Number.isInteger(counter)
-            || counter <= this.lastInboundCounter
-            || keyEpoch !== this.keyEpoch
-            || sessionId !== options.sessionId
+            sender !== SECURE_SENDER_MAC ||
+            !this.macToPhoneKey ||
+            !this.handshakeDone ||
+            !Number.isInteger(counter) ||
+            counter <= this.lastInboundCounter ||
+            keyEpoch !== this.keyEpoch ||
+            sessionId !== options.sessionId
           ) {
             return;
           }
 
-          const ciphertext = typeof control.ciphertext === "string" ? control.ciphertext : "";
+          const ciphertext =
+            typeof control.ciphertext === "string" ? control.ciphertext : "";
           const tag = typeof control.tag === "string" ? control.tag : "";
           const decrypted = await decryptEnvelopePayload(
             this.macToPhoneKey,
@@ -311,7 +363,9 @@ export class RelayService {
             nonceForDirection(SECURE_SENDER_MAC, counter),
           );
           this.lastInboundCounter = counter;
-          console.log(`[mobile][relay] encryptedEnvelope received counter=${counter}`);
+          console.log(
+            `[mobile][relay] encryptedEnvelope received counter=${counter}`,
+          );
 
           const parsedPayload = JSON.parse(bytesToUtf8(decrypted)) as {
             bridgeOutboundSeq?: number;
@@ -324,7 +378,10 @@ export class RelayService {
             );
           }
 
-          const payloadText = typeof parsedPayload.payloadText === "string" ? parsedPayload.payloadText : "";
+          const payloadText =
+            typeof parsedPayload.payloadText === "string"
+              ? parsedPayload.payloadText
+              : "";
           if (!payloadText) {
             return;
           }
@@ -341,7 +398,10 @@ export class RelayService {
           }
         }
       } catch (error) {
-        this.emit("error", error instanceof Error ? error : new Error(String(error)));
+        this.emit(
+          "error",
+          error instanceof Error ? error : new Error(String(error)),
+        );
       }
     };
 
@@ -352,7 +412,9 @@ export class RelayService {
       }
 
       this.emit("presence", "offline");
-      console.log(`[mobile][relay] socket close code=${event.code} reason=${event.reason || "none"}`);
+      console.log(
+        `[mobile][relay] socket close code=${event.code} reason=${event.reason || "none"}`,
+      );
 
       // 4002 is expected when desktop is offline; keep retrying.
       if (event.code === 4002 || event.code === 4003 || event.code === 4001) {
@@ -391,19 +453,27 @@ export class RelayService {
     const counter = this.nextOutboundCounter;
     this.nextOutboundCounter += 1;
     const nonce = nonceForDirection(SECURE_SENDER_IPHONE, counter);
-    const payloadBytes = utf8ToBytes(JSON.stringify({ payloadText: JSON.stringify(message) }));
-    const encrypted = await encryptEnvelopePayload(this.phoneToMacKey, payloadBytes, nonce);
+    const payloadBytes = utf8ToBytes(
+      JSON.stringify({ payloadText: JSON.stringify(message) }),
+    );
+    const encrypted = await encryptEnvelopePayload(
+      this.phoneToMacKey,
+      payloadBytes,
+      nonce,
+    );
 
-    this.socket.send(JSON.stringify({
-      kind: "encryptedEnvelope",
-      v: SECURE_PROTOCOL_VERSION,
-      sessionId: this.activeOptions?.sessionId,
-      keyEpoch: this.keyEpoch,
-      sender: SECURE_SENDER_IPHONE,
-      counter,
-      ciphertext: bytesToBase64(encrypted.ciphertext),
-      tag: bytesToBase64(encrypted.tag),
-    }));
+    this.socket.send(
+      JSON.stringify({
+        kind: "encryptedEnvelope",
+        v: SECURE_PROTOCOL_VERSION,
+        sessionId: this.activeOptions?.sessionId,
+        keyEpoch: this.keyEpoch,
+        sender: SECURE_SENDER_IPHONE,
+        counter,
+        ciphertext: bytesToBase64(encrypted.ciphertext),
+        tag: bytesToBase64(encrypted.tag),
+      }),
+    );
   }
 
   async requestJson<TResult = unknown>(
@@ -414,7 +484,9 @@ export class RelayService {
     const requestId = this.nextRequestId;
     this.nextRequestId += 1;
     const requestKey = String(requestId);
-    console.log(`[mobile][relay] request start method=${method} id=${requestKey}`);
+    console.log(
+      `[mobile][relay] request start method=${method} id=${requestKey}`,
+    );
 
     return new Promise<TResult>((resolve, reject) => {
       const timer = setTimeout(() => {
@@ -430,25 +502,37 @@ export class RelayService {
         reject,
         timer,
       });
-      console.log(`[mobile][relay] pending add id=${requestKey} pendingCount=${this.pendingRequests.size}`);
+      console.log(
+        `[mobile][relay] pending add id=${requestKey} pendingCount=${this.pendingRequests.size}`,
+      );
 
-      void this.sendJson(buildRequest(method, params, requestId)).catch((error) => {
-        clearTimeout(timer);
-        this.pendingRequests.delete(requestKey);
-        console.warn(`[mobile][relay] request send failed method=${method} id=${requestKey}`, error);
-        reject(error instanceof Error ? error : new Error(String(error)));
-      });
+      void this.sendJson(buildRequest(method, params, requestId)).catch(
+        (error) => {
+          clearTimeout(timer);
+          this.pendingRequests.delete(requestKey);
+          console.warn(
+            `[mobile][relay] request send failed method=${method} id=${requestKey}`,
+            error,
+          );
+          reject(error instanceof Error ? error : new Error(String(error)));
+        },
+      );
     });
   }
 
   isSecureReady() {
-    return this.handshakeDone
-      && this.phoneToMacKey != null
-      && this.macToPhoneKey != null
-      && this.socket?.readyState === WebSocket.OPEN;
+    return (
+      this.handshakeDone &&
+      this.phoneToMacKey != null &&
+      this.macToPhoneKey != null &&
+      this.socket?.readyState === WebSocket.OPEN
+    );
   }
 
-  async ensureIdentityPair(): Promise<{ privateKeyHex: string; publicKeyHex: string }> {
+  async ensureIdentityPair(): Promise<{
+    privateKeyHex: string;
+    publicKeyHex: string;
+  }> {
     const privateKey = ed25519.utils.randomPrivateKey();
     const publicKey = ed25519.getPublicKey(privateKey);
     return {
@@ -486,10 +570,13 @@ export class RelayService {
     }
   }
 
-  private resolvePendingRequestIfResponse(
-    message: { id?: string | number | null; result?: unknown; error?: { message?: string } | null },
-  ) {
-    const isResponse = ("result" in message || "error" in message) && message.id != null;
+  private resolvePendingRequestIfResponse(message: {
+    id?: string | number | null;
+    result?: unknown;
+    error?: { message?: string } | null;
+  }) {
+    const isResponse =
+      ("result" in message || "error" in message) && message.id != null;
     if (!isResponse) {
       return false;
     }
@@ -572,11 +659,13 @@ async function encryptEnvelopePayload(
     throw new Error("Web Crypto is unavailable in this runtime.");
   }
 
-  const encrypted = new Uint8Array(await globalThis.crypto.subtle.encrypt(
-    { name: "AES-GCM", iv: nonce as unknown as BufferSource },
-    key.key,
-    payload as unknown as BufferSource,
-  ));
+  const encrypted = new Uint8Array(
+    await globalThis.crypto.subtle.encrypt(
+      { name: "AES-GCM", iv: nonce as unknown as BufferSource },
+      key.key,
+      payload as unknown as BufferSource,
+    ),
+  );
 
   if (encrypted.length < 16) {
     throw new Error("Encrypted payload is too short.");
@@ -617,7 +706,10 @@ async function decryptEnvelopePayload(
   return new Uint8Array(plaintext);
 }
 
-function nonceForDirection(sender: "mac" | "iphone", counter: number): Uint8Array {
+function nonceForDirection(
+  sender: "mac" | "iphone",
+  counter: number,
+): Uint8Array {
   const nonce = new Uint8Array(12);
   nonce[0] = sender === SECURE_SENDER_MAC ? 1 : 2;
 

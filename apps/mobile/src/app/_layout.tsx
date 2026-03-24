@@ -17,7 +17,6 @@ export default function RootLayout() {
       <AnimatedSplashOverlay />
       <Stack screenOptions={{ headerShown: false }}>
         <Stack.Screen name="(tabs)" />
-        <Stack.Screen name="session" />
       </Stack>
     </ThemeProvider>
   );

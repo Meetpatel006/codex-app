@@ -1,4 +1,4 @@
-import React, { useEffect } from "react";
+import React, { useEffect, useState } from "react";
 import {
   Dimensions,
   KeyboardAvoidingView,
@@ -29,6 +29,7 @@ export function BottomSheet({
   onClose,
   children,
 }: BottomSheetProps) {
+  const [isMounted, setIsMounted] = useState(isVisible);
   const translateY = useSharedValue(SCREEN_HEIGHT);
   const opacity = useSharedValue(0);
 
@@ -48,6 +49,7 @@ export function BottomSheet({
 
   useEffect(() => {
     if (isVisible) {
+      setIsMounted(true);
       opacity.value = withTiming(1, { duration: 300 });
       translateY.value = withTiming(0, {
         duration: 300,
@@ -59,6 +61,10 @@ export function BottomSheet({
         duration: 250,
         easing: Easing.bezier(0.25, 0.1, 0.25, 1),
       });
+      const timeout = setTimeout(() => {
+        setIsMounted(false);
+      }, 260);
+      return () => clearTimeout(timeout);
     }
   }, [isVisible, onClose, opacity, translateY]);
 
@@ -100,7 +106,7 @@ export function BottomSheet({
     transform: [{ translateY: translateY.value }],
   }));
 
-  if (!isVisible && opacity.value === 0) {
+  if (!isMounted) {
     return null;
   }
 

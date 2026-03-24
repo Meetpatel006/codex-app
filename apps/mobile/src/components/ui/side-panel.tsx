@@ -1,4 +1,4 @@
-import React, { useEffect } from "react";
+import React, { useEffect, useState } from "react";
 import { Dimensions, Pressable, StyleSheet, View } from "react-native";
 import Animated, {
   Easing,
@@ -19,11 +19,13 @@ type SidePanelProps = {
 };
 
 export function SidePanel({ isVisible, onClose, children }: SidePanelProps) {
+  const [isMounted, setIsMounted] = useState(isVisible);
   const translateX = useSharedValue(SCREEN_WIDTH);
   const opacity = useSharedValue(0);
 
   useEffect(() => {
     if (isVisible) {
+      setIsMounted(true);
       opacity.value = withTiming(1, { duration: 300 });
       translateX.value = withTiming(0, {
         duration: 300,
@@ -41,6 +43,10 @@ export function SidePanel({ isVisible, onClose, children }: SidePanelProps) {
           runOnJS(onClose)();
         },
       );
+      const timeout = setTimeout(() => {
+        setIsMounted(false);
+      }, 260);
+      return () => clearTimeout(timeout);
     }
   }, [isVisible, onClose, opacity, translateX]);
 
@@ -52,7 +58,7 @@ export function SidePanel({ isVisible, onClose, children }: SidePanelProps) {
     transform: [{ translateX: translateX.value }],
   }));
 
-  if (!isVisible && opacity.value === 0) {
+  if (!isMounted) {
     return null;
   }
 

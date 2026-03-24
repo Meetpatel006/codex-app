@@ -1,3 +1,5 @@
+import "react-native-get-random-values";
+
 const IV_LENGTH = 12;
 
 function getCrypto() {
@@ -59,13 +61,19 @@ export function base64ToBytes(value: string): Uint8Array {
 
 export async function importAesKey(rawKey: Uint8Array): Promise<CryptoKey> {
   const crypto = getCrypto();
-  return crypto.subtle.importKey("raw", rawKey as unknown as BufferSource, { name: "AES-GCM", length: 256 }, false, [
-    "encrypt",
-    "decrypt",
-  ]);
+  return crypto.subtle.importKey(
+    "raw",
+    rawKey as unknown as BufferSource,
+    { name: "AES-GCM", length: 256 },
+    false,
+    ["encrypt", "decrypt"],
+  );
 }
 
-export async function encryptAesGcm(key: CryptoKey, plaintext: Uint8Array): Promise<Uint8Array> {
+export async function encryptAesGcm(
+  key: CryptoKey,
+  plaintext: Uint8Array,
+): Promise<Uint8Array> {
   const crypto = getCrypto();
   const iv = crypto.getRandomValues(new Uint8Array(IV_LENGTH));
   const ciphertext = await crypto.subtle.encrypt(
@@ -80,7 +88,10 @@ export async function encryptAesGcm(key: CryptoKey, plaintext: Uint8Array): Prom
   return output;
 }
 
-export async function decryptAesGcm(key: CryptoKey, payload: Uint8Array): Promise<Uint8Array> {
+export async function decryptAesGcm(
+  key: CryptoKey,
+  payload: Uint8Array,
+): Promise<Uint8Array> {
   if (payload.length <= IV_LENGTH) {
     throw new Error("Encrypted payload is too short.");
   }
