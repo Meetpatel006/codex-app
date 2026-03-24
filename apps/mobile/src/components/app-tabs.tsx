@@ -3,33 +3,13 @@ import React, { useState } from 'react';
 import { useColorScheme, View, Pressable, Text } from 'react-native';
 
 import { Colors } from '@/constants/theme';
-import { ProjectSidebar } from './ProjectSidebar';
 
 export default function AppTabs() {
   const scheme = useColorScheme();
   const colors = Colors[scheme === 'unspecified' ? 'light' : scheme];
-  const [sidebarOpen, setSidebarOpen] = useState(false);
-
-  const handleProjectSelect = (projectId: string) => {
-    // Handle project selection - can navigate or update UI as needed
-    console.log('Project selected:', projectId);
-  };
-
-  const handleSessionSelect = (projectId: string, sessionId: string) => {
-    // Handle session selection - can navigate or update UI as needed
-    console.log('Session selected:', projectId, sessionId);
-  };
-
   return (
-    <View style={{ flex: 1 }}>
-      <ProjectSidebar
-        isOpen={sidebarOpen}
-        onClose={() => setSidebarOpen(false)}
-        onProjectSelect={handleProjectSelect}
-        onSessionSelect={handleSessionSelect}
-      />
-      <View style={{ flex: 1, position: 'relative' }}>
-        <NativeTabs
+    <View style={{ flex: 1, position: 'relative' }}>
+      <NativeTabs
           backgroundColor={colors.background}
           indicatorColor={colors.backgroundElement}
           labelStyle={{ selected: { color: colors.text } }}>
@@ -65,19 +45,6 @@ export default function AppTabs() {
             />
           </NativeTabs.Trigger>
         </NativeTabs>
-        <Pressable
-          onPress={() => setSidebarOpen(true)}
-          style={{
-            position: 'absolute',
-            top: 12,
-            left: 16,
-            padding: 8,
-            zIndex: 100,
-          }}
-        >
-          <Text style={{ fontSize: 18, color: colors.text }}>☰</Text>
-        </Pressable>
-      </View>
     </View>
   );
 }

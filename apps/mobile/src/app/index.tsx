@@ -19,6 +19,7 @@ import { MessageBubble } from "@/components/MessageBubble";
 import { PresenceIndicator } from "@/components/PresenceIndicator";
 import { SessionTranscriptLoader } from "@/components/SessionTranscriptLoader";
 import { ProjectSidebar } from "../components/ProjectSidebar";
+import { MenuIcon } from "../components/icons/Icon";
 import { buildRequest } from "@/services/jsonrpc";
 import { relayService } from "@/services/relay";
 import { useChatStore } from "@/store/chat";
@@ -742,74 +743,75 @@ export default function ChatScreen() {
   }
 
   return (
-    <View style={styles.container}>
-      <SessionTranscriptLoader
-        sessionRef={activeSessionId}
-        loadTick={sessionLoadTick}
-      />
-
-      <ProjectSidebar
-        isOpen={sidebarOpen}
-        onClose={() => setSidebarOpen(false)}
-        onProjectSelect={(projectId) => {
-          console.log("[mobile][sidebar] project selected", { projectId });
-        }}
-        onSessionSelect={(projectId, sessionId) => {
-          console.log("[mobile][sidebar] session selected", {
-            projectId,
-            sessionId,
-          });
-          setSessionLoadTick((value) => value + 1);
-        }}
-      />
-
-      <View style={styles.header}>
-        <Pressable
-          onPress={() => setSidebarOpen(true)}
-          style={styles.sessionButton}
-          accessibilityLabel="Open sidebar"
-        >
-          <Text style={styles.sessionButtonText}>☰</Text>
-        </Pressable>
-        <Text style={styles.title}>Chat</Text>
-        <PresenceIndicator status={presence} />
-      </View>
-
-      <ScrollView
-        style={styles.messages}
-        contentContainerStyle={styles.messageContent}
-      >
-        {messages.map((message) => (
-          <MessageBubble
-            key={message.id}
-            role={message.role}
-            text={message.text}
-            streaming={message.isStreaming}
-            kind={message.kind}
-            deliveryState={message.deliveryState}
-            commandExecution={message.commandExecution}
-            fileChanges={message.fileChanges}
-          />
-        ))}
-      </ScrollView>
-
-      <View style={styles.inputRow}>
-        <TextInput
-          value={input}
-          onChangeText={setInput}
-          placeholder="Ask Codex..."
-          placeholderTextColor="#777"
-          style={styles.input}
-          multiline
+    <ProjectSidebar
+      isOpen={sidebarOpen}
+      onOpen={() => setSidebarOpen(true)}
+      onClose={() => setSidebarOpen(false)}
+      onProjectSelect={(projectId) => {
+        console.log("[mobile][sidebar] project selected", { projectId });
+      }}
+      onSessionSelect={(projectId, sessionId) => {
+        console.log("[mobile][sidebar] session selected", {
+          projectId,
+          sessionId,
+        });
+        setSessionLoadTick((value) => value + 1);
+      }}
+    >
+      <View style={styles.container}>
+        <SessionTranscriptLoader
+          sessionRef={activeSessionId}
+          loadTick={sessionLoadTick}
         />
-        <Pressable
-          onPress={() => void send()}
-          style={[styles.sendButton, !canSend && styles.disabled]}
+
+        <View style={styles.header}>
+          <Pressable
+            onPress={() => setSidebarOpen(true)}
+            style={styles.sessionButton}
+            accessibilityLabel="Open sidebar"
+          >
+            <MenuIcon size={16} color="#f0f0f0" />
+          </Pressable>
+          <Text style={styles.title}>Chat</Text>
+          <PresenceIndicator status={presence} />
+        </View>
+
+        <ScrollView
+          style={styles.messages}
+          contentContainerStyle={styles.messageContent}
         >
-          <Text style={styles.sendButtonText}>Send</Text>
-        </Pressable>
+          {messages.map((message) => (
+            <MessageBubble
+              key={message.id}
+              role={message.role}
+              text={message.text}
+              streaming={message.isStreaming}
+              kind={message.kind}
+              deliveryState={message.deliveryState}
+              commandExecution={message.commandExecution}
+              fileChanges={message.fileChanges}
+            />
+          ))}
+        </ScrollView>
+
+        <View style={styles.inputRow}>
+          <TextInput
+            value={input}
+            onChangeText={setInput}
+            placeholder="Ask Codex..."
+            placeholderTextColor="#777"
+            style={styles.input}
+            multiline
+          />
+          <Pressable
+            onPress={() => void send()}
+            style={[styles.sendButton, !canSend && styles.disabled]}
+          >
+            <Text style={styles.sendButtonText}>Send</Text>
+          </Pressable>
+        </View>
       </View>
-    </View>
+    </ProjectSidebar>
   );
 }
 
