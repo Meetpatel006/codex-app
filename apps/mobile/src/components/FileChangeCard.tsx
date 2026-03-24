@@ -1,5 +1,4 @@
 import React, { useState } from "react";
-import { router } from "expo-router";
 import {
   Modal,
   Pressable,
@@ -10,6 +9,7 @@ import {
 } from "react-native";
 import { useDiffStore } from "@/store/diff";
 import { useSessionStore } from "@/store/session";
+import { useUiStore } from "@/store/ui";
 import { parseUnifiedDiff } from "@/utils/diff";
 import { DiffBlockView } from "./DiffBlockView";
 
@@ -27,12 +27,12 @@ type Props = {
   changes: FileChange[];
 };
 
-
 export function FileChangeCard({ changes }: Props) {
   const [selectedFile, setSelectedFile] = useState<FileChange | null>(null);
   const activeSessionId = useSessionStore((state) => state.activeSessionId);
   const setDiffSnapshot = useDiffStore((state) => state.setDiffSnapshot);
   const selectFile = useDiffStore((state) => state.selectFile);
+  const openDiffPanel = useUiStore((state) => state.openDiffPanel);
 
   // Group changes by action
   const groupedChanges = changes.reduce(
@@ -63,7 +63,7 @@ export function FileChangeCard({ changes }: Props) {
     const matchedFile =
       parsedFiles.find((item) => item.path === file.path) || parsedFiles[0];
     selectFile(activeSessionId, matchedFile.id);
-    router.navigate("/diff");
+    openDiffPanel();
   }
 
   return (

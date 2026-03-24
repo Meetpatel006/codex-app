@@ -1,4 +1,4 @@
-import { Link, router } from "expo-router";
+import { router } from "expo-router";
 import React, { useCallback, useEffect, useRef, useState } from "react";
 import { Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
 
@@ -7,16 +7,18 @@ import { PresenceIndicator } from "@/components/PresenceIndicator";
 import { SessionTranscriptLoader } from "@/components/SessionTranscriptLoader";
 import { ProjectSidebar } from "@/components/ProjectSidebar";
 import { PromptInput } from "@/components/prompt-input";
-import {
-  MenuIcon,
-  GitCommitIcon,
-  CodeDiffIcon,
-} from "@/components/icons/Icon";
+import { MenuIcon, GitCommitIcon, CodeDiffIcon } from "@/components/icons/Icon";
+import { CodeDiffView } from "@/components/code-diff-view";
+import { GitCommitView } from "@/components/git-commit-view";
+import { BottomSheet } from "@/components/ui/bottom-sheet";
+import { SidePanel } from "@/components/ui/side-panel";
 import { buildRequest } from "@/services/jsonrpc";
 import { relayService } from "@/services/relay";
 import { useChatStore } from "@/store/chat";
 import { useDiffStore } from "@/store/diff";
+import { useUiStore } from "@/store/ui";
 import { parseUnifiedDiff } from "@/utils/diff";
+import { getGitCwd, requestGitStatus } from "@/utils/git";
 import { useSessionStore } from "@/store/session";
 import { useTheme } from "@/hooks/use-theme";
 
@@ -248,8 +250,18 @@ export default function ChatScreen() {
   const activeProjectId = useSessionStore((state) => state.activeProjectId);
   const activeSessionId = useSessionStore((state) => state.activeSessionId);
   const [sidebarOpen, setSidebarOpen] = useState(false);
+  const [commitSheetOpen, setCommitSheetOpen] = useState(false);
+  const [commitStatusText, setCommitStatusText] = useState("");
+  const [commitSubmitting, setCommitSubmitting] = useState(false);
+  const [commitBranch, setCommitBranch] = useState("-");
+  const [commitChangedFiles, setCommitChangedFiles] = useState(0);
+  const [commitAdditions, setCommitAdditions] = useState(0);
+  const [commitDeletions, setCommitDeletions] = useState(0);
   const setActiveDiffSession = useDiffStore((state) => state.setActiveSession);
   const setDiffSnapshot = useDiffStore((state) => state.setDiffSnapshot);
+  const isDiffPanelOpen = useUiStore((state) => state.isDiffPanelOpen);
+  const openDiffPanel = useUiStore((state) => state.openDiffPanel);
+  const closeDiffPanel = useUiStore((state) => state.closeDiffPanel);
 
   const presence = useChatStore((state) => state.presence);
   const messages = useChatStore((state) => state.messages);
@@ -283,6 +295,10 @@ export default function ChatScreen() {
   );
   const addFileChanges = useChatStore((state) => state.addFileChanges);
 
+  const activeProject =
+    projects.find((project) => project.id === activeProjectId) || null;
+  const gitCwd = getGitCwd(activeProject?.description);
+
   useEffect(() => {
     void loadSession();
   }, [loadSession]);
@@ -290,6 +306,84 @@ export default function ChatScreen() {
   useEffect(() => {
     setActiveDiffSession(activeSessionId);
   }, [activeSessionId, setActiveDiffSession]);
+
+  const loadCommitStatus = useCallback(async () => {
+    if (!gitCwd || !relayService.isSecureReady()) {
+      setCommitStatusText("Git status unavailable for current project.");
+      return;
+    }
+
+    try {
+      setCommitStatusText("Loading repository status...");
+      const status = await requestGitStatus(gitCwd);
+      const files = status?.files || [];
+      const diff = status?.diff || {};
+
+      setCommitBranch((status?.branch || "-").trim() || "-");
+      setCommitChangedFiles(files.length);
+      setCommitAdditions(Number(diff.additions || 0));
+      setCommitDeletions(Number(diff.deletions || 0));
+      setCommitStatusText("");
+    } catch (error) {
+      setCommitStatusText(
+        error instanceof Error ? error.message : "Failed to load git status.",
+      );
+    }
+  }, [gitCwd]);
+
+  useEffect(() => {
+    if (!commitSheetOpen) {
+      return;
+    }
+
+    void loadCommitStatus();
+  }, [commitSheetOpen, loadCommitStatus]);
+
+  const runCommit = useCallback(
+    async (payload: {
+      message: string;
+      includeUnstaged: boolean;
+      draft: boolean;
+      nextStep: "commit" | "push";
+    }) => {
+      if (!gitCwd) {
+        setCommitStatusText("Git commit requires an active project path.");
+        return;
+      }
+
+      setCommitSubmitting(true);
+      setCommitStatusText("Running commit...");
+
+      try {
+        await relayService.requestJson("git/commit", {
+          cwd: gitCwd,
+          message: payload.message,
+          includeUnstaged: payload.includeUnstaged,
+          draft: payload.draft,
+        });
+
+        if (payload.nextStep === "push") {
+          setCommitStatusText("Commit complete. Pushing...");
+          await relayService.requestJson("git/push", { cwd: gitCwd });
+        }
+
+        setCommitStatusText(
+          payload.nextStep === "push"
+            ? "Commit and push completed."
+            : "Commit completed.",
+        );
+        await loadCommitStatus();
+        setCommitSheetOpen(false);
+      } catch (error) {
+        setCommitStatusText(
+          error instanceof Error ? error.message : "Commit failed.",
+        );
+      } finally {
+        setCommitSubmitting(false);
+      }
+    },
+    [gitCwd, loadCommitStatus],
+  );
 
   const refreshCodexSessions = useCallback(async () => {
     if (!relayService.isSecureReady()) {
@@ -772,38 +866,34 @@ export default function ChatScreen() {
             </Pressable>
             <Text style={[styles.title, { color: theme.text }]}>Chat</Text>
             <View style={styles.headerIcons}>
-              <Link href="/explore" asChild>
-                <Pressable
-                  style={StyleSheet.flatten([
-                    styles.headerIconButton,
-                    {
-                      backgroundColor: theme.backgroundElement,
-                      borderColor: theme.backgroundSelected,
-                    },
-                  ])}
-                  accessibilityRole="link"
-                  accessibilityLabel="Open git screen"
-                  hitSlop={8}
-                >
-                  <GitCommitIcon size={20} color={theme.text} />
-                </Pressable>
-              </Link>
-              <Link href="/diff" asChild>
-                <Pressable
-                  style={StyleSheet.flatten([
-                    styles.headerIconButton,
-                    {
-                      backgroundColor: theme.backgroundElement,
-                      borderColor: theme.backgroundSelected,
-                    },
-                  ])}
-                  accessibilityRole="link"
-                  accessibilityLabel="Open diff panel"
-                  hitSlop={8}
-                >
-                  <CodeDiffIcon size={20} color={theme.text} />
-                </Pressable>
-              </Link>
+              <Pressable
+                onPress={() => setCommitSheetOpen(true)}
+                style={StyleSheet.flatten([
+                  styles.headerIconButton,
+                  {
+                    backgroundColor: theme.backgroundElement,
+                    borderColor: theme.backgroundSelected,
+                  },
+                ])}
+                accessibilityLabel="Open commit sheet"
+                hitSlop={8}
+              >
+                <GitCommitIcon size={20} color={theme.text} />
+              </Pressable>
+              <Pressable
+                onPress={openDiffPanel}
+                style={StyleSheet.flatten([
+                  styles.headerIconButton,
+                  {
+                    backgroundColor: theme.backgroundElement,
+                    borderColor: theme.backgroundSelected,
+                  },
+                ])}
+                accessibilityLabel="Open diff panel"
+                hitSlop={8}
+              >
+                <CodeDiffIcon size={20} color={theme.text} />
+              </Pressable>
             </View>
           </View>
           <View style={styles.presenceRow}>
@@ -831,6 +921,27 @@ export default function ChatScreen() {
 
         <PromptInput onSend={send} />
       </View>
+
+      <BottomSheet
+        isVisible={commitSheetOpen}
+        onClose={() => setCommitSheetOpen(false)}
+      >
+        <GitCommitView
+          branch={commitBranch}
+          changedFiles={commitChangedFiles}
+          additions={commitAdditions}
+          deletions={commitDeletions}
+          isSubmitting={commitSubmitting}
+          statusText={commitStatusText}
+          onCommit={(payload) => {
+            void runCommit(payload);
+          }}
+        />
+      </BottomSheet>
+
+      <SidePanel isVisible={isDiffPanelOpen} onClose={closeDiffPanel}>
+        <CodeDiffView onClose={closeDiffPanel} />
+      </SidePanel>
     </ProjectSidebar>
   );
 }

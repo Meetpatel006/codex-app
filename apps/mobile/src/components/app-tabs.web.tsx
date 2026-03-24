@@ -5,27 +5,33 @@ import {
   TabSlot,
   TabTriggerSlotProps,
   TabListProps,
-} from 'expo-router/ui';
-import { SymbolView } from 'expo-symbols';
-import React, { useState } from 'react';
-import { Pressable, useColorScheme, View, StyleSheet, Text } from 'react-native';
+} from "expo-router/ui";
+import { SymbolView } from "expo-symbols";
+import React, { useState } from "react";
+import {
+  Pressable,
+  useColorScheme,
+  View,
+  StyleSheet,
+  Text,
+} from "react-native";
 
-import { ExternalLink } from './external-link';
-import { ThemedText } from './themed-text';
-import { ThemedView } from './themed-view';
-import { ProjectSidebar } from './ProjectSidebar';
+import { ExternalLink } from "./external-link";
+import { ThemedText } from "./themed-text";
+import { ThemedView } from "./themed-view";
+import { ProjectSidebar } from "./ProjectSidebar";
 
-import { Colors, MaxContentWidth, Spacing } from '@/constants/theme';
+import { Colors, MaxContentWidth, Spacing } from "@/constants/theme";
 
 export default function AppTabs() {
   const [sidebarOpen, setSidebarOpen] = useState(false);
 
   const handleProjectSelect = (projectId: string) => {
-    console.log('Project selected:', projectId);
+    console.log("Project selected:", projectId);
   };
 
   const handleSessionSelect = (projectId: string, sessionId: string) => {
-    console.log('Session selected:', projectId, sessionId);
+    console.log("Session selected:", projectId, sessionId);
   };
 
   return (
@@ -37,14 +43,11 @@ export default function AppTabs() {
         onSessionSelect={handleSessionSelect}
       />
       <Tabs>
-        <TabSlot style={{ height: '100%' }} />
+        <TabSlot style={{ height: "100%" }} />
         <TabList asChild>
           <CustomTabList onMenuPress={() => setSidebarOpen(true)}>
             <TabTrigger name="home" href="/" asChild>
               <TabButton>Home</TabButton>
-            </TabTrigger>
-            <TabTrigger name="explore" href="/explore" asChild>
-              <TabButton>Explore</TabButton>
             </TabTrigger>
             <TabTrigger name="session" href="/session" asChild>
               <TabButton>Session</TabButton>
@@ -59,16 +62,28 @@ export default function AppTabs() {
   );
 }
 
-export function TabButton({ children, isFocused, ...props }: TabTriggerSlotProps) {
+export function TabButton({
+  children,
+  isFocused,
+  ...props
+}: TabTriggerSlotProps) {
   return (
-    <Pressable {...props} style={({ pressed }) => [styles.tabButtonWrapper, pressed && styles.pressed]}>
+    <Pressable
+      {...props}
+      style={({ pressed }) => [
+        styles.tabButtonWrapper,
+        pressed && styles.pressed,
+      ]}
+    >
       <ThemedView
-        type={isFocused ? 'backgroundSelected' : 'backgroundElement'}
-        style={styles.tabButtonView}>
-        <ThemedText 
-          type={isFocused ? 'smallBold' : 'small'}
-          themeColor={isFocused ? 'text' : 'textSecondary'}
-          style={{ fontSize: isFocused ? 14 : 13 }}>
+        type={isFocused ? "backgroundSelected" : "backgroundElement"}
+        style={styles.tabButtonView}
+      >
+        <ThemedText
+          type={isFocused ? "smallBold" : "small"}
+          themeColor={isFocused ? "text" : "textSecondary"}
+          style={{ fontSize: isFocused ? 14 : 13 }}
+        >
           {children}
         </ThemedText>
       </ThemedView>
@@ -76,9 +91,11 @@ export function TabButton({ children, isFocused, ...props }: TabTriggerSlotProps
   );
 }
 
-export function CustomTabList(props: TabListProps & { onMenuPress?: () => void }) {
+export function CustomTabList(
+  props: TabListProps & { onMenuPress?: () => void },
+) {
   const scheme = useColorScheme();
-  const colors = Colors[scheme === 'unspecified' ? 'light' : scheme];
+  const colors = Colors[scheme === "unspecified" ? "light" : scheme];
 
   return (
     <View {...props} style={styles.tabListContainer}>
@@ -98,7 +115,7 @@ export function CustomTabList(props: TabListProps & { onMenuPress?: () => void }
             <ThemedText type="link">Docs</ThemedText>
             <SymbolView
               tintColor={colors.text}
-              name={{ ios: 'arrow.up.right.square', web: 'link' }}
+              name={{ ios: "arrow.up.right.square", web: "link" }}
               size={12}
             />
           </Pressable>
@@ -110,19 +127,19 @@ export function CustomTabList(props: TabListProps & { onMenuPress?: () => void }
 
 const styles = StyleSheet.create({
   tabListContainer: {
-    position: 'absolute',
-    width: '100%',
+    position: "absolute",
+    width: "100%",
     padding: Spacing.three,
-    justifyContent: 'center',
-    alignItems: 'center',
-    flexDirection: 'row',
+    justifyContent: "center",
+    alignItems: "center",
+    flexDirection: "row",
   },
   innerContainer: {
     paddingVertical: Spacing.two,
     paddingHorizontal: Spacing.five,
     borderRadius: Spacing.five,
-    flexDirection: 'row',
-    alignItems: 'center',
+    flexDirection: "row",
+    alignItems: "center",
     flexGrow: 1,
     gap: Spacing.two,
     maxWidth: MaxContentWidth,
@@ -134,10 +151,10 @@ const styles = StyleSheet.create({
   },
   menuIcon: {
     fontSize: 18,
-    fontWeight: '600',
+    fontWeight: "600",
   },
   brandText: {
-    marginRight: 'auto',
+    marginRight: "auto",
   },
   pressed: {
     opacity: 0.7,
@@ -151,9 +168,9 @@ const styles = StyleSheet.create({
     borderRadius: Spacing.three,
   },
   externalPressable: {
-    flexDirection: 'row',
-    justifyContent: 'center',
-    alignItems: 'center',
+    flexDirection: "row",
+    justifyContent: "center",
+    alignItems: "center",
     gap: Spacing.one,
     marginLeft: Spacing.three,
   },

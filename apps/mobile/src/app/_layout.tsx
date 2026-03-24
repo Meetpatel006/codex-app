@@ -1,5 +1,9 @@
 import "react-native-get-random-values";
-import { DarkTheme, DefaultTheme, ThemeProvider } from "@react-navigation/native";
+import {
+  DarkTheme,
+  DefaultTheme,
+  ThemeProvider,
+} from "@react-navigation/native";
 import { Stack } from "expo-router";
 import React from "react";
 import { useColorScheme } from "react-native";
@@ -13,8 +17,6 @@ export default function RootLayout() {
       <AnimatedSplashOverlay />
       <Stack screenOptions={{ headerShown: false }}>
         <Stack.Screen name="(tabs)" />
-        <Stack.Screen name="explore" />
-        <Stack.Screen name="diff" />
         <Stack.Screen name="session" />
       </Stack>
     </ThemeProvider>

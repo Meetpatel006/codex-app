@@ -1,5 +1,4 @@
 import React, { useMemo } from "react";
-import { router } from "expo-router";
 import { StyleSheet, Text, View } from "react-native";
 import { CodeBlockView } from "./CodeBlockView";
 import { CommandExecutionCard } from "./CommandExecutionCard";
@@ -14,6 +13,7 @@ import {
 import type { CommandExecutionData, FileChangeData } from "@/store/chat";
 import { useDiffStore } from "@/store/diff";
 import { useSessionStore } from "@/store/session";
+import { useUiStore } from "@/store/ui";
 import { parseUnifiedDiff } from "@/utils/diff";
 import { useTheme } from "@/hooks/use-theme";
 
@@ -42,6 +42,7 @@ export function MessageBubble({
   const isSystem = role === "system";
   const activeSessionId = useSessionStore((state) => state.activeSessionId);
   const setDiffSnapshot = useDiffStore((state) => state.setDiffSnapshot);
+  const openDiffPanel = useUiStore((state) => state.openDiffPanel);
 
   const themedStyles = useMemo(() => createStyles(colors), [colors]);
 
@@ -58,7 +59,7 @@ export function MessageBubble({
     setDiffSnapshot(activeSessionId, parsedFiles, {
       preserveSelection: false,
     });
-    router.navigate("/diff");
+    openDiffPanel();
   }
 
   // Render user message
