@@ -1,6 +1,7 @@
-import React from "react";
+import React, { useMemo } from "react";
 import { Linking, StyleSheet, Text, View } from "react-native";
 import { parseInlineMentions } from "@/utils/markdown-parser";
+import { useTheme } from "@/hooks/use-theme";
 
 type Props = {
   content: string;
@@ -120,10 +121,12 @@ function parseMarkdownFormatting(text: string): MarkdownToken[] {
  * Handles markdown formatting, inline mentions (@file, $skill)
  */
 export function MarkdownText({ content }: Props) {
+  const colors = useTheme();
+  const themedStyles = useMemo(() => createStyles(colors), [colors]);
   const lines = content.split("\n");
 
   return (
-    <View style={styles.container}>
+    <View style={themedStyles.container}>
       {lines.map((line, lineIndex) => {
         // Header: ### text
         const headerMatch = line.match(/^(#{1,6})\s+(.+)$/);
@@ -134,10 +137,10 @@ export function MarkdownText({ content }: Props) {
             <Text
               key={lineIndex}
               style={[
-                styles.text,
-                level === 1 && styles.header1,
-                level === 2 && styles.header2,
-                level >= 3 && styles.header3,
+                themedStyles.text,
+                level === 1 && themedStyles.header1,
+                level === 2 && themedStyles.header2,
+                level >= 3 && themedStyles.header3,
               ]}
             >
               {headerText}
@@ -151,11 +154,11 @@ export function MarkdownText({ content }: Props) {
           const listText = listMatch[1];
           const tokens = parseMarkdownFormatting(listText);
           return (
-            <View key={lineIndex} style={styles.listItem}>
-              <Text style={styles.bullet}>•</Text>
-              <Text style={styles.text}>
+            <View key={lineIndex} style={themedStyles.listItem}>
+              <Text style={themedStyles.bullet}>•</Text>
+              <Text style={themedStyles.text}>
                 {tokens.map((token, tokenIndex) =>
-                  renderToken(token, tokenIndex),
+                  renderToken(token, tokenIndex, themedStyles),
                 )}
               </Text>
             </View>
@@ -169,11 +172,11 @@ export function MarkdownText({ content }: Props) {
           const listText = numberedListMatch[2];
           const tokens = parseMarkdownFormatting(listText);
           return (
-            <View key={lineIndex} style={styles.listItem}>
-              <Text style={styles.bullet}>{number}.</Text>
-              <Text style={styles.text}>
+            <View key={lineIndex} style={themedStyles.listItem}>
+              <Text style={themedStyles.bullet}>{number}.</Text>
+              <Text style={themedStyles.text}>
                 {tokens.map((token, tokenIndex) =>
-                  renderToken(token, tokenIndex),
+                  renderToken(token, tokenIndex, themedStyles),
                 )}
               </Text>
             </View>
@@ -184,22 +187,26 @@ export function MarkdownText({ content }: Props) {
         if (line.trim()) {
           const tokens = parseMarkdownFormatting(line);
           return (
-            <Text key={lineIndex} style={styles.text}>
+            <Text key={lineIndex} style={themedStyles.text}>
               {tokens.map((token, tokenIndex) =>
-                renderToken(token, tokenIndex),
+                renderToken(token, tokenIndex, themedStyles),
               )}
             </Text>
           );
         }
 
         // Empty line
-        return <View key={lineIndex} style={styles.emptyLine} />;
+        return <View key={lineIndex} style={themedStyles.emptyLine} />;
       })}
     </View>
   );
 }
 
-function renderToken(token: MarkdownToken, index: number): React.ReactNode {
+function renderToken(
+  token: MarkdownToken,
+  index: number,
+  styles: ReturnType<typeof createStyles>,
+): React.ReactNode {
   switch (token.type) {
     case "bold":
       return (
@@ -250,73 +257,74 @@ function renderToken(token: MarkdownToken, index: number): React.ReactNode {
   }
 }
 
-const styles = StyleSheet.create({
-  container: {
-    marginVertical: 4,
-  },
-  text: {
-    color: "#f5f5f5",
-    fontSize: 14,
-    lineHeight: 20,
-  },
-  header1: {
-    fontSize: 20,
-    fontWeight: "700",
-    marginTop: 8,
-    marginBottom: 4,
-  },
-  header2: {
-    fontSize: 18,
-    fontWeight: "700",
-    marginTop: 6,
-    marginBottom: 3,
-  },
-  header3: {
-    fontSize: 16,
-    fontWeight: "600",
-    marginTop: 4,
-    marginBottom: 2,
-  },
-  listItem: {
-    flexDirection: "row",
-    marginVertical: 2,
-    paddingLeft: 8,
-  },
-  bullet: {
-    color: "#f5f5f5",
-    fontSize: 14,
-    lineHeight: 20,
-    marginRight: 8,
-    minWidth: 20,
-  },
-  emptyLine: {
-    height: 8,
-  },
-  bold: {
-    fontWeight: "700",
-  },
-  italic: {
-    fontStyle: "italic",
-  },
-  inlineCode: {
-    fontFamily: "monospace",
-    backgroundColor: "#2a2a2a",
-    paddingHorizontal: 4,
-    paddingVertical: 2,
-    borderRadius: 3,
-    color: "#e5e5e5",
-    fontSize: 13,
-  },
-  link: {
-    color: "#7fc7ff",
-    textDecorationLine: "underline",
-  },
-  fileMention: {
-    color: "#7fc7ff", // Cyan for file mentions
-    fontWeight: "500",
-  },
-  skillMention: {
-    color: "#d4a5ff", // Purple for skill mentions
-    fontWeight: "500",
-  },
-});
+const createStyles = (colors: ReturnType<typeof useTheme>) =>
+  StyleSheet.create({
+    container: {
+      marginVertical: 4,
+    },
+    text: {
+      color: colors.assistantText,
+      fontSize: 14,
+      lineHeight: 20,
+    },
+    header1: {
+      fontSize: 20,
+      fontWeight: "700",
+      marginTop: 8,
+      marginBottom: 4,
+    },
+    header2: {
+      fontSize: 18,
+      fontWeight: "700",
+      marginTop: 6,
+      marginBottom: 3,
+    },
+    header3: {
+      fontSize: 16,
+      fontWeight: "600",
+      marginTop: 4,
+      marginBottom: 2,
+    },
+    listItem: {
+      flexDirection: "row",
+      marginVertical: 2,
+      paddingLeft: 8,
+    },
+    bullet: {
+      color: colors.assistantText,
+      fontSize: 14,
+      lineHeight: 20,
+      marginRight: 8,
+      minWidth: 20,
+    },
+    emptyLine: {
+      height: 8,
+    },
+    bold: {
+      fontWeight: "700",
+    },
+    italic: {
+      fontStyle: "italic",
+    },
+    inlineCode: {
+      fontFamily: "monospace",
+      backgroundColor: colors.codeHeaderBackground,
+      paddingHorizontal: 4,
+      paddingVertical: 2,
+      borderRadius: 3,
+      color: colors.codeText,
+      fontSize: 13,
+    },
+    link: {
+      color: colors.linkColor,
+      textDecorationLine: "underline",
+    },
+    fileMention: {
+      color: colors.fileMention,
+      fontWeight: "500",
+    },
+    skillMention: {
+      color: colors.skillMention,
+      fontWeight: "500",
+    },
+  });

@@ -1,13 +1,15 @@
-import React, { useState } from "react";
+import React, { useMemo, useState } from "react";
 import { Clipboard, Pressable, StyleSheet, Text, View } from "react-native";
+import { useTheme } from "@/hooks/use-theme";
 
 type Props = {
   language: string;
   code: string;
 };
 
-
 export function CodeBlockView({ language, code }: Props) {
+  const colors = useTheme();
+  const themedStyles = useMemo(() => createStyles(colors), [colors]);
   const [copied, setCopied] = useState(false);
 
   function handleCopy() {
@@ -17,20 +19,20 @@ export function CodeBlockView({ language, code }: Props) {
   }
 
   return (
-    <View style={styles.container}>
+    <View style={themedStyles.container}>
       {/* Header bar with language and copy button */}
-      <View style={styles.header}>
-        <Text style={styles.languageLabel}>{language || "code"}</Text>
-        <Pressable onPress={handleCopy} style={styles.copyButton}>
-          <Text style={styles.copyButtonText}>
+      <View style={themedStyles.header}>
+        <Text style={themedStyles.languageLabel}>{language || "code"}</Text>
+        <Pressable onPress={handleCopy} style={themedStyles.copyButton}>
+          <Text style={themedStyles.copyButtonText}>
             {copied ? "Copied!" : "Copy"}
           </Text>
         </Pressable>
       </View>
 
       {/* Code content */}
-      <View style={styles.codeContainer}>
-        <Text style={styles.code} selectable>
+      <View style={themedStyles.codeContainer}>
+        <Text style={themedStyles.code} selectable>
           {code}
         </Text>
       </View>
@@ -38,44 +40,45 @@ export function CodeBlockView({ language, code }: Props) {
   );
 }
 
-const styles = StyleSheet.create({
-  container: {
-    borderRadius: 8,
-    overflow: "hidden",
-    marginVertical: 8,
-  },
-  header: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    alignItems: "center",
-    paddingHorizontal: 12,
-    paddingVertical: 8,
-    backgroundColor: "#1a1a1a", // quaternarySystemFill equivalent
-  },
-  languageLabel: {
-    color: "#9f9f9f",
-    fontSize: 12,
-    fontFamily: "monospace",
-    textTransform: "lowercase",
-  },
-  copyButton: {
-    paddingHorizontal: 8,
-    paddingVertical: 4,
-  },
-  copyButtonText: {
-    color: "#6fdc8c",
-    fontSize: 12,
-    fontWeight: "600",
-  },
-  codeContainer: {
-    backgroundColor: "#141414", // tertiarySystemGroupedBackground equivalent
-    paddingHorizontal: 12,
-    paddingVertical: 12,
-  },
-  code: {
-    color: "#e5e5e5",
-    fontSize: 13,
-    fontFamily: "monospace",
-    lineHeight: 18,
-  },
-});
+const createStyles = (colors: ReturnType<typeof useTheme>) =>
+  StyleSheet.create({
+    container: {
+      borderRadius: 8,
+      overflow: "hidden",
+      marginVertical: 8,
+    },
+    header: {
+      flexDirection: "row",
+      justifyContent: "space-between",
+      alignItems: "center",
+      paddingHorizontal: 12,
+      paddingVertical: 8,
+      backgroundColor: colors.codeHeaderBackground,
+    },
+    languageLabel: {
+      color: colors.textSecondary,
+      fontSize: 12,
+      fontFamily: "monospace",
+      textTransform: "lowercase",
+    },
+    copyButton: {
+      paddingHorizontal: 8,
+      paddingVertical: 4,
+    },
+    copyButtonText: {
+      color: colors.successColor,
+      fontSize: 12,
+      fontWeight: "600",
+    },
+    codeContainer: {
+      backgroundColor: colors.codeBackground,
+      paddingHorizontal: 12,
+      paddingVertical: 12,
+    },
+    code: {
+      color: colors.codeText,
+      fontSize: 13,
+      fontFamily: "monospace",
+      lineHeight: 18,
+    },
+  });

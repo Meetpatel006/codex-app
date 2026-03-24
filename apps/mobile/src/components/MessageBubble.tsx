@@ -1,4 +1,4 @@
-import React from "react";
+import React, { useMemo } from "react";
 import { router } from "expo-router";
 import { StyleSheet, Text, View } from "react-native";
 import { CodeBlockView } from "./CodeBlockView";
@@ -15,6 +15,7 @@ import type { CommandExecutionData, FileChangeData } from "@/store/chat";
 import { useDiffStore } from "@/store/diff";
 import { useSessionStore } from "@/store/session";
 import { parseUnifiedDiff } from "@/utils/diff";
+import { useTheme } from "@/hooks/use-theme";
 
 type Props = {
   role: "user" | "assistant" | "system";
@@ -26,7 +27,6 @@ type Props = {
   fileChanges?: FileChangeData[];
 };
 
-
 export function MessageBubble({
   role,
   text,
@@ -36,11 +36,14 @@ export function MessageBubble({
   commandExecution,
   fileChanges,
 }: Props) {
+  const colors = useTheme();
   const isUser = role === "user";
   const isAssistant = role === "assistant";
   const isSystem = role === "system";
   const activeSessionId = useSessionStore((state) => state.activeSessionId);
   const setDiffSnapshot = useDiffStore((state) => state.setDiffSnapshot);
+
+  const themedStyles = useMemo(() => createStyles(colors), [colors]);
 
   function openAssistantDiff(diffText: string) {
     if (!activeSessionId) {
@@ -61,20 +64,20 @@ export function MessageBubble({
   // Render user message
   if (isUser) {
     return (
-      <View style={styles.userWrapper}>
-        <View style={styles.userBubble}>
-          <Text style={styles.userText}>
+      <View style={themedStyles.userWrapper}>
+        <View style={themedStyles.userBubble}>
+          <Text style={themedStyles.userText}>
             {parseInlineMentions(text).map((token, index) => {
               if (token.type === "file") {
                 return (
-                  <Text key={index} style={styles.userFileMention}>
+                  <Text key={index} style={themedStyles.userFileMention}>
                     {token.content}
                   </Text>
                 );
               }
               if (token.type === "skill") {
                 return (
-                  <Text key={index} style={styles.userSkillMention}>
+                  <Text key={index} style={themedStyles.userSkillMention}>
                     {token.content}
                   </Text>
                 );
@@ -85,8 +88,8 @@ export function MessageBubble({
           {deliveryState !== "sent" && (
             <Text
               style={[
-                styles.deliveryStatus,
-                deliveryState === "failed" && styles.deliveryFailed,
+                themedStyles.deliveryStatus,
+                deliveryState === "failed" && themedStyles.deliveryFailed,
               ]}
             >
               {deliveryState === "sending" ? "sending..." : "send failed"}
@@ -101,9 +104,9 @@ export function MessageBubble({
   if (isSystem) {
     if (kind === "thinking") {
       return (
-        <View style={styles.systemWrapper}>
+        <View style={themedStyles.systemWrapper}>
           {text.trim() && text.trim() !== "Thinking..." ? (
-            <Text style={styles.systemText}>{text}</Text>
+            <Text style={themedStyles.systemText}>{text}</Text>
           ) : (
             <ThinkingText streaming={streaming} />
           )}
@@ -113,7 +116,7 @@ export function MessageBubble({
 
     if (kind === "command-execution" && commandExecution) {
       return (
-        <View style={styles.systemWrapper}>
+        <View style={themedStyles.systemWrapper}>
           <CommandExecutionCard {...commandExecution} />
         </View>
       );
@@ -121,7 +124,7 @@ export function MessageBubble({
 
     if (kind === "file-change" && fileChanges && fileChanges.length > 0) {
       return (
-        <View style={styles.systemWrapper}>
+        <View style={themedStyles.systemWrapper}>
           <FileChangeCard changes={fileChanges} />
         </View>
       );
@@ -129,15 +132,15 @@ export function MessageBubble({
 
     if (kind === "plan") {
       return (
-        <View style={styles.systemWrapper}>
-          <Text style={styles.systemText}>📋 {text}</Text>
+        <View style={themedStyles.systemWrapper}>
+          <Text style={themedStyles.systemText}>📋 {text}</Text>
         </View>
       );
     }
 
     return (
-      <View style={styles.systemWrapper}>
-        <Text style={styles.systemText}>{text}</Text>
+      <View style={themedStyles.systemWrapper}>
+        <Text style={themedStyles.systemText}>{text}</Text>
       </View>
     );
   }
@@ -147,7 +150,7 @@ export function MessageBubble({
     const segments = parseMarkdownSegments(text);
 
     return (
-      <View style={styles.assistantWrapper}>
+      <View style={themedStyles.assistantWrapper}>
         {segments.map((segment, index) => {
           if (segment.type === "codeBlock") {
             if (segment.isDiff) {
@@ -179,59 +182,60 @@ export function MessageBubble({
   return null;
 }
 
-const styles = StyleSheet.create({
-  // User message styles
-  userWrapper: {
-    alignItems: "flex-end",
-    marginVertical: 10,
-  },
-  userBubble: {
-    maxWidth: "85%",
-    paddingHorizontal: 16,
-    paddingVertical: 12,
-    borderRadius: 24,
-    backgroundColor: "rgba(47, 79, 143, 0.8)", // tertiarySystemFill equivalent
-    borderWidth: 1,
-    borderColor: "rgba(255, 255, 255, 0.08)",
-  },
-  userText: {
-    color: "#f5f5f5",
-    fontSize: 14,
-    lineHeight: 20,
-  },
-  userFileMention: {
-    color: "#7fc7ff",
-    fontWeight: "500",
-  },
-  userSkillMention: {
-    color: "#d4a5ff",
-    fontWeight: "500",
-  },
-  deliveryStatus: {
-    color: "#9f9f9f",
-    fontSize: 11,
-    marginTop: 4,
-  },
-  deliveryFailed: {
-    color: "#ff9d9d",
-  },
+const createStyles = (colors: ReturnType<typeof useTheme>) =>
+  StyleSheet.create({
+    // User message styles
+    userWrapper: {
+      alignItems: "flex-end",
+      marginVertical: 10,
+    },
+    userBubble: {
+      maxWidth: "85%",
+      paddingHorizontal: 16,
+      paddingVertical: 12,
+      borderRadius: 24,
+      backgroundColor: colors.userBubble,
+      borderWidth: 1,
+      borderColor: colors.userBubbleBorder,
+    },
+    userText: {
+      color: colors.userText,
+      fontSize: 14,
+      lineHeight: 20,
+    },
+    userFileMention: {
+      color: colors.fileMention,
+      fontWeight: "500",
+    },
+    userSkillMention: {
+      color: colors.skillMention,
+      fontWeight: "500",
+    },
+    deliveryStatus: {
+      color: colors.systemText,
+      fontSize: 11,
+      marginTop: 4,
+    },
+    deliveryFailed: {
+      color: colors.errorColor,
+    },
 
-  // Assistant message styles
-  assistantWrapper: {
-    alignItems: "flex-start",
-    marginVertical: 10,
-    maxWidth: "95%",
-  },
+    // Assistant message styles
+    assistantWrapper: {
+      alignItems: "flex-start",
+      marginVertical: 10,
+      maxWidth: "95%",
+    },
 
-  // System message styles
-  systemWrapper: {
-    alignItems: "flex-start",
-    marginVertical: 6,
-    paddingHorizontal: 8,
-  },
-  systemText: {
-    color: "#9f9f9f",
-    fontSize: 12,
-    fontStyle: "italic",
-  },
-});
+    // System message styles
+    systemWrapper: {
+      alignItems: "flex-start",
+      marginVertical: 6,
+      paddingHorizontal: 8,
+    },
+    systemText: {
+      color: colors.systemText,
+      fontSize: 12,
+      fontStyle: "italic",
+    },
+  });

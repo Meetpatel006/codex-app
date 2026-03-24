@@ -2,23 +2,16 @@ import { router } from "expo-router";
 import React, {
   useCallback,
   useEffect,
-  useMemo,
   useRef,
   useState,
 } from "react";
-import {
-  Pressable,
-  ScrollView,
-  StyleSheet,
-  Text,
-  TextInput,
-  View,
-} from "react-native";
+import { Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
 
 import { MessageBubble } from "@/components/MessageBubble";
 import { PresenceIndicator } from "@/components/PresenceIndicator";
 import { SessionTranscriptLoader } from "@/components/SessionTranscriptLoader";
 import { ProjectSidebar } from "../components/ProjectSidebar";
+import { PromptInput } from "../components/prompt-input";
 import { MenuIcon } from "../components/icons/Icon";
 import { buildRequest } from "@/services/jsonrpc";
 import { relayService } from "@/services/relay";
@@ -26,6 +19,7 @@ import { useChatStore } from "@/store/chat";
 import { useDiffStore } from "@/store/diff";
 import { parseUnifiedDiff } from "@/utils/diff";
 import { useSessionStore } from "@/store/session";
+import { useTheme } from "@/hooks/use-theme";
 
 type CodexSessionSummary = {
   sessionId?: string;
@@ -231,7 +225,7 @@ function humanizeProjectName(cwd: string) {
 }
 
 export default function ChatScreen() {
-  const [input, setInput] = useState("");
+  const theme = useTheme();
   const [assistantMessageId, setAssistantMessageId] = useState<string | null>(
     null,
   );
@@ -289,11 +283,6 @@ export default function ChatScreen() {
     (state) => state.updateCommandExecution,
   );
   const addFileChanges = useChatStore((state) => state.addFileChanges);
-
-  const canSend = useMemo(
-    () => input.trim().length > 0 && presence !== "connecting",
-    [input, presence],
-  );
 
   useEffect(() => {
     void loadSession();
@@ -719,14 +708,12 @@ export default function ChatScreen() {
     };
   }, []);
 
-  async function send() {
-    const text = input.trim();
-    if (!text) {
+  async function send(text: string) {
+    if (!text.trim()) {
       return;
     }
 
     const messageId = addUserMessage(text);
-    setInput("");
     setAssistantMessageId(null);
 
     try {
@@ -758,7 +745,7 @@ export default function ChatScreen() {
         setSessionLoadTick((value) => value + 1);
       }}
     >
-      <View style={styles.container}>
+      <View style={[styles.container, { backgroundColor: theme.background }]}>
         <SessionTranscriptLoader
           sessionRef={activeSessionId}
           loadTick={sessionLoadTick}
@@ -767,12 +754,18 @@ export default function ChatScreen() {
         <View style={styles.header}>
           <Pressable
             onPress={() => setSidebarOpen(true)}
-            style={styles.sessionButton}
+            style={[
+              styles.sessionButton,
+              {
+                backgroundColor: theme.backgroundElement,
+                borderColor: theme.backgroundSelected,
+              },
+            ]}
             accessibilityLabel="Open sidebar"
           >
-            <MenuIcon size={16} color="#f0f0f0" />
+            <MenuIcon size={16} color={theme.text} />
           </Pressable>
-          <Text style={styles.title}>Chat</Text>
+          <Text style={[styles.title, { color: theme.text }]}>Chat</Text>
           <PresenceIndicator status={presence} />
         </View>
 
@@ -794,22 +787,7 @@ export default function ChatScreen() {
           ))}
         </ScrollView>
 
-        <View style={styles.inputRow}>
-          <TextInput
-            value={input}
-            onChangeText={setInput}
-            placeholder="Ask Codex..."
-            placeholderTextColor="#777"
-            style={styles.input}
-            multiline
-          />
-          <Pressable
-            onPress={() => void send()}
-            style={[styles.sendButton, !canSend && styles.disabled]}
-          >
-            <Text style={styles.sendButtonText}>Send</Text>
-          </Pressable>
-        </View>
+        <PromptInput onSend={send} />
       </View>
     </ProjectSidebar>
   );
@@ -818,8 +796,6 @@ export default function ChatScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: "#0b0b0b",
-    paddingHorizontal: 12,
     paddingTop: 48,
     gap: 10,
   },
@@ -829,22 +805,19 @@ const styles = StyleSheet.create({
     alignItems: "center",
     gap: 12,
     marginBottom: 8,
+    paddingHorizontal: 10,
   },
   sessionButton: {
     paddingHorizontal: 10,
     paddingVertical: 6,
     borderRadius: 8,
     borderWidth: 1,
-    borderColor: "#3a3a3a",
-    backgroundColor: "#1a1a1a",
   },
   sessionButtonText: {
-    color: "#f0f0f0",
     fontSize: 13,
     fontWeight: "600",
   },
   title: {
-    color: "#f0f0f0",
     fontSize: 20,
     fontWeight: "700",
     flex: 1,
@@ -853,40 +826,9 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   messageContent: {
-    paddingHorizontal: 16,
+    paddingHorizontal: 10,
     paddingTop: 12,
     paddingBottom: 8,
     gap: 20,
-  },
-  inputRow: {
-    flexDirection: "row",
-    gap: 8,
-    alignItems: "flex-end",
-    paddingBottom: 8,
-  },
-  input: {
-    flex: 1,
-    minHeight: 44,
-    maxHeight: 120,
-    borderWidth: 1,
-    borderColor: "#333",
-    borderRadius: 8,
-    color: "#eee",
-    paddingHorizontal: 10,
-    paddingVertical: 8,
-    backgroundColor: "#141414",
-  },
-  sendButton: {
-    paddingHorizontal: 14,
-    paddingVertical: 11,
-    borderRadius: 8,
-    backgroundColor: "#2d5f2d",
-  },
-  disabled: {
-    opacity: 0.5,
-  },
-  sendButtonText: {
-    color: "#fff",
-    fontWeight: "700",
   },
 });
