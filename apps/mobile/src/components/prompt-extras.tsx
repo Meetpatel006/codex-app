@@ -1,7 +1,13 @@
 import React, { useState } from "react";
-import { View, StyleSheet } from "react-native";
+import { View, StyleSheet, type ViewStyle } from "react-native";
 import { DropdownMenu, DropdownOption } from "./ui/dropdown-menu";
 import { Spacing } from "@/constants/theme";
+import {
+  LaptopIcon,
+  LaptopCloudIcon,
+  ShieldIcon,
+  BranchIcon,
+} from "./icons/Icon";
 
 const LOCAL_OPTIONS: DropdownOption[] = [
   { label: "Local", value: "local" },
@@ -9,9 +15,8 @@ const LOCAL_OPTIONS: DropdownOption[] = [
 ];
 
 const SECURITY_OPTIONS: DropdownOption[] = [
-  { label: "Default permissions", value: "default" },
+  { label: "Supervised", value: "default" },
   { label: "Full access", value: "full" },
-  { label: "Read only", value: "read" },
 ];
 
 const BRANCH_OPTIONS: DropdownOption[] = [
@@ -19,53 +24,51 @@ const BRANCH_OPTIONS: DropdownOption[] = [
   { label: "develop", value: "develop" },
 ];
 
-export function LocalSelector() {
+type SelectorProps = {
+  style?: ViewStyle;
+};
+
+export function LocalSelector({ style }: SelectorProps) {
   const [selected, setSelected] = useState(LOCAL_OPTIONS[0]);
+
+  const IconComponent =
+    selected.value === "cloud" ? LaptopCloudIcon : LaptopIcon;
 
   return (
     <DropdownMenu
       label={selected.label}
-      icon={{
-        ios: "laptopcomputer",
-        android: "laptop",
-        web: "laptop",
-      }}
+      icon={<IconComponent size={14} color="#888" />}
       options={LOCAL_OPTIONS}
       onSelect={setSelected}
+      style={style}
     />
   );
 }
 
-export function SecuritySelector() {
+export function SecuritySelector({ style }: SelectorProps) {
   const [selected, setSelected] = useState(SECURITY_OPTIONS[0]);
 
   return (
     <DropdownMenu
       label={selected.label}
-      icon={{
-        ios: "shield.fill",
-        android: "shield",
-        web: "shield",
-      }}
+      icon={<ShieldIcon size={14} color="#888" />}
       options={SECURITY_OPTIONS}
       onSelect={setSelected}
+      style={style}
     />
   );
 }
 
-export function BranchSelector() {
+export function BranchSelector({ style }: SelectorProps) {
   const [selected, setSelected] = useState(BRANCH_OPTIONS[0]);
 
   return (
     <DropdownMenu
       label={selected.label}
-      icon={{
-        ios: "source.control",
-        android: "account_tree",
-        web: "account_tree",
-      }}
+      icon={<BranchIcon size={14} color="#888" />}
       options={BRANCH_OPTIONS}
       onSelect={setSelected}
+      style={style}
     />
   );
 }
@@ -73,25 +76,26 @@ export function BranchSelector() {
 export function PromptExtras() {
   return (
     <View style={styles.container}>
-      <View style={styles.leftGroup}>
-        <LocalSelector />
-        <SecuritySelector />
-      </View>
-      <BranchSelector />
+      <LocalSelector style={styles.sideItem} />
+      <SecuritySelector style={styles.middleItem} />
+      <BranchSelector style={styles.sideItem} />
     </View>
   );
 }
 
 const styles = StyleSheet.create({
   container: {
+    width: "100%",
     flexDirection: "row",
-    justifyContent: "space-between",
     alignItems: "center",
+    gap: Spacing.one,
     marginTop: 12,
     paddingHorizontal: Spacing.one,
   },
-  leftGroup: {
-    flexDirection: "row",
-    gap: 1,
+  sideItem: {
+    flex: 0.85,
+  },
+  middleItem: {
+    flex: 1.3,
   },
 });

@@ -1,4 +1,3 @@
-import { useRouter } from "expo-router";
 import Constants from "expo-constants";
 import React, { useEffect, useState } from "react";
 import { CameraView, useCameraPermissions } from "expo-camera";
@@ -14,6 +13,10 @@ import {
 } from "react-native";
 
 import { useSessionStore } from "@/store/session";
+
+type PairDeviceViewProps = {
+  onPaired?: () => void;
+};
 
 function extractHostFromUrl(input: string) {
   try {
@@ -78,7 +81,6 @@ function normalizeRelayUrl(relayUrl: string, sourceInput: string) {
 function parsePairingPayload(raw: string) {
   const trimmed = raw.trim();
 
-  // Preferred format from bridge QR payload (JSON string)
   if (trimmed.startsWith("{") && trimmed.endsWith("}")) {
     const parsed = JSON.parse(trimmed) as {
       relay?: string;
@@ -113,7 +115,6 @@ function parsePairingPayload(raw: string) {
     };
   }
 
-  // Legacy format: relayUrl|sessionId|bridgePublicKey|expiryMs
   const [relayUrl, sessionId, bridgeIdentityPublicKey, expiryRaw] = trimmed
     .split("|")
     .map((item) => item.trim());
@@ -140,8 +141,7 @@ function parsePairingPayload(raw: string) {
   };
 }
 
-export default function PairScreen() {
-  const router = useRouter();
+export function PairDeviceView({ onPaired }: PairDeviceViewProps) {
   const pairing = useSessionStore((state) => state.pairing);
   const setPairing = useSessionStore((state) => state.setPairing);
   const [payload, setPayload] = useState("");
@@ -182,13 +182,13 @@ export default function PairScreen() {
           ...pairing,
           relayUrl,
         });
-        router.replace("/");
+        onPaired?.();
         return;
       }
 
       const parsed = parsePairingPayload(payload);
       await setPairing(parsed);
-      router.replace("/");
+      onPaired?.();
     } catch (error) {
       Alert.alert(
         "Pairing failed",
@@ -211,7 +211,6 @@ export default function PairScreen() {
         throw new Error("Relay URL is required.");
       }
 
-      // Validate URL syntax before saving.
       void new URL(normalizedRelayUrl);
 
       await setPairing({

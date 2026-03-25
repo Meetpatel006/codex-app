@@ -1,17 +1,17 @@
-import React from 'react';
-import Svg, { Path, Circle } from 'react-native-svg';
+import React from "react";
+import Svg, { Path, Circle } from "react-native-svg";
 
 type Props = {
   size?: number;
   color?: string;
 };
 
-export function FolderIcon({ size = 24, color = '#000' }: Props) {
+export function FolderIcon({ size = 24, color = "#000" }: Props) {
   return (
     <Svg width={size} height={size} viewBox="0 0 20 20" fill="none">
       <Path
-        fillRule="evenodd" 
-        clipRule="evenodd" 
+        fillRule="evenodd"
+        clipRule="evenodd"
         d="M1.66669 5C1.66669 3.61929 2.78598 2.5 4.16669 2.5H7.643C8.30604 2.5 8.94192 2.76339 9.41077 3.23223L10.1011 3.92259C10.2574 4.07887 10.4694 4.16667 10.6904 4.16667H15.8334C17.2141 4.16667 18.3334 5.28595 18.3334 6.66667V15C18.3334 16.3807 17.2141 17.5 15.8334 17.5H4.16669C2.78598 17.5 1.66669 16.3807 1.66669 15V5ZM4.16669 4.16667C3.70645 4.16667 3.33335 4.53976 3.33335 5V8.33333H16.6667V6.66667C16.6667 6.20643 16.2936 5.83333 15.8334 5.83333H10.6904C10.0273 5.83333 9.39145 5.56994 8.92261 5.1011L8.23225 4.41074C8.07597 4.25446 7.86401 4.16667 7.643 4.16667H4.16669ZM16.6667 10H3.33335V15C3.33335 15.4602 3.70645 15.8333 4.16669 15.8333H15.8334C16.2936 15.8333 16.6667 15.4602 16.6667 15V10Z"
         fill={color}
       />
@@ -19,12 +19,12 @@ export function FolderIcon({ size = 24, color = '#000' }: Props) {
   );
 }
 
-export function FolderOpenIcon({ size = 24, color = '#000' }: Props) {
+export function FolderOpenIcon({ size = 24, color = "#000" }: Props) {
   return (
     <Svg width={size} height={size} viewBox="0 0 24 24" fill="none">
       <Path
-        fillRule="evenodd" 
-        clipRule="evenodd" 
+        fillRule="evenodd"
+        clipRule="evenodd"
         d="M8.36575 5.00294C8.31789 5.00035 8.26519 5 8.08579 5H7.3C6.44342 5 5.86113 5.00078 5.41104 5.03755C4.97262 5.07337 4.74842 5.1383 4.59202 5.21799C4.2157 5.40974 3.90973 5.7157 3.71799 6.09202C3.6383 6.24842 3.57337 6.47263 3.53755 6.91104C3.50078 7.36113 3.5 7.94342 3.5 8.8V13.3338C4.10345 12.2477 4.92627 11.2786 6.03229 10.4584C6.46262 10.1392 6.97003 10 7.45416 10H19.4995C19.4981 9.54872 19.4929 9.20759 19.4738 8.92661C19.4487 8.55915 19.4031 8.36814 19.3478 8.23464C19.1448 7.74458 18.7554 7.35523 18.2654 7.15224C18.1319 7.09695 17.9409 7.0513 17.5734 7.02623C17.197 7.00054 16.7126 7 16 7L12.8908 7.00001C12.7448 7.00002 12.6347 7.00003 12.5259 6.99413C11.6159 6.94474 10.75 6.58609 10.0717 5.97756C9.99052 5.90478 9.91272 5.82696 9.80953 5.72375L9.7929 5.70711C9.66604 5.58025 9.62853 5.54323 9.59285 5.51123C9.25366 5.20696 8.82074 5.02764 8.36575 5.00294ZM21.4996 10H21.6958C23.2725 10 24.218 11.7333 23.3868 13.0603C22.2267 14.9122 21.6207 15.9779 21.2984 17.3273C20.8483 19.2122 19.3008 21 17.0719 21H7.25868C7.23455 21 7.21056 21 7.18669 21H6.07372C5.95032 21 5.8274 20.9941 5.70538 20.9825C5.54408 20.9762 5.3918 20.9675 5.24817 20.9558C4.68608 20.9099 4.16937 20.8113 3.68404 20.564C2.93139 20.1805 2.31947 19.5686 1.93597 18.816C1.68868 18.3306 1.59012 17.8139 1.54419 17.2518C1.49998 16.7106 1.49999 16.0463 1.5 15.2413V8.7587C1.49999 7.95373 1.49998 7.28937 1.54419 6.74818C1.59012 6.18608 1.68868 5.66938 1.93597 5.18404C2.31947 4.43139 2.93139 3.81947 3.68404 3.43598C4.16937 3.18869 4.68608 3.09012 5.24817 3.0442C5.78937 2.99998 6.45373 2.99999 7.2587 3L8.10922 3C8.25524 2.99999 8.36528 2.99997 8.47414 3.00588C9.38412 3.05527 10.25 3.41391 10.9283 4.02245C11.0095 4.09525 11.0873 4.17306 11.1905 4.27632L11.2071 4.2929C11.334 4.41975 11.3715 4.45678 11.4072 4.48878C11.7463 4.79305 12.1793 4.97237 12.6343 4.99706C12.6821 4.99966 12.7348 5 12.9142 5L16.0343 5C16.7041 4.99999 17.2569 4.99999 17.7095 5.03087C18.1788 5.06289 18.6129 5.13142 19.0307 5.30449C20.0108 5.71046 20.7895 6.48916 21.1955 7.46927C21.3686 7.88708 21.4371 8.32118 21.4691 8.79047C21.4925 9.1336 21.4982 9.53436 21.4996 10ZM17.0719 19C18.1001 19 19.0467 18.1456 19.3531 16.8627C19.7604 15.1572 20.5385 13.8397 21.691 12H7.45416C7.34602 12 7.26903 12.0312 7.22363 12.0648C5.55547 13.3019 4.68121 14.9804 4.2774 17.1283C4.11717 17.9806 4.77661 18.8636 5.82444 18.9857C6.20963 18.9996 6.68386 19 7.3 19H17.0719Z"
         fill={color}
       />
@@ -32,7 +32,7 @@ export function FolderOpenIcon({ size = 24, color = '#000' }: Props) {
   );
 }
 
-export function MenuIcon({ size = 24, color = '#000' }: Props) {
+export function MenuIcon({ size = 24, color = "#000" }: Props) {
   return (
     <Svg width={size} height={size} viewBox="0 0 24 24" fill="none">
       <Path
@@ -43,58 +43,300 @@ export function MenuIcon({ size = 24, color = '#000' }: Props) {
   );
 }
 
-export function SortAZIcon({ size = 24, color = '#000' }: Props) {
+export function SortAZIcon({ size = 24, color = "#000" }: Props) {
   return (
-    <Svg width={size} height={size} viewBox="0 0 24 24" fill="none" color={color}>
-      <Path d="M8 19V4" stroke={color} strokeWidth={1.5} strokeLinecap="round" strokeLinejoin="round" />
-      <Path d="M16 8H20" stroke={color} strokeWidth={1.5} strokeLinecap="round" strokeLinejoin="round" />
-      <Path d="M20 10V6C20 4.89543 19.1046 4 18 4C16.8954 4 16 4.89543 16 6V10" stroke={color} strokeWidth={1.5} strokeLinecap="round" strokeLinejoin="round" />
-      <Path d="M16 14H18.365C19.2886 14 19.7504 14 19.8853 14.2879C20.0201 14.5758 19.7245 14.9306 19.1332 15.6402L16.8668 18.3598C16.2755 19.0694 15.9799 19.4242 16.1147 19.7121C16.2496 20 16.7114 20 17.635 20H20" stroke={color} strokeWidth={1.5} strokeLinecap="round" strokeLinejoin="round" />
-      <Path d="M4 16C4 16 6.94596 20 8.00003 20C9.05411 20 12 16 12 16" stroke={color} strokeWidth={1.5} strokeLinecap="round" strokeLinejoin="round" />
+    <Svg
+      width={size}
+      height={size}
+      viewBox="0 0 24 24"
+      fill="none"
+      color={color}
+    >
+      <Path
+        d="M8 19V4"
+        stroke={color}
+        strokeWidth={1.5}
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+      <Path
+        d="M16 8H20"
+        stroke={color}
+        strokeWidth={1.5}
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+      <Path
+        d="M20 10V6C20 4.89543 19.1046 4 18 4C16.8954 4 16 4.89543 16 6V10"
+        stroke={color}
+        strokeWidth={1.5}
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+      <Path
+        d="M16 14H18.365C19.2886 14 19.7504 14 19.8853 14.2879C20.0201 14.5758 19.7245 14.9306 19.1332 15.6402L16.8668 18.3598C16.2755 19.0694 15.9799 19.4242 16.1147 19.7121C16.2496 20 16.7114 20 17.635 20H20"
+        stroke={color}
+        strokeWidth={1.5}
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+      <Path
+        d="M4 16C4 16 6.94596 20 8.00003 20C9.05411 20 12 16 12 16"
+        stroke={color}
+        strokeWidth={1.5}
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
     </Svg>
   );
 }
 
-export function SortZAIcon({ size = 24, color = '#000' }: Props) {
+export function SortZAIcon({ size = 24, color = "#000" }: Props) {
   return (
-    <Svg width={size} height={size} viewBox="0 0 24 24" fill="none" color={color}>
-      <Path d="M16 18H20" stroke={color} strokeWidth={1.5} strokeLinecap="round" strokeLinejoin="round" />
-      <Path d="M20 20V16C20 14.8954 19.1046 14 18 14C16.8954 14 16 14.8954 16 16V20" stroke={color} strokeWidth={1.5} strokeLinecap="round" strokeLinejoin="round" />
-      <Path d="M4 7.99997C4 7.99997 6.94596 4.00001 8.00003 4C9.05411 3.99999 12 8 12 8" stroke={color} strokeWidth={1.5} strokeLinecap="round" strokeLinejoin="round" />
-      <Path d="M8 5V20" stroke={color} strokeWidth={1.5} strokeLinecap="round" strokeLinejoin="round" />
-      <Path d="M16 4H18.365C19.2886 4 19.7504 4 19.8853 4.28792C20.0201 4.57584 19.7245 4.93062 19.1332 5.64018L16.8668 8.35982C16.2755 9.06938 15.9799 9.42416 16.1147 9.71208C16.2496 10 16.7114 10 17.635 10H20" stroke={color} strokeWidth={1.5} strokeLinecap="round" strokeLinejoin="round" />
+    <Svg
+      width={size}
+      height={size}
+      viewBox="0 0 24 24"
+      fill="none"
+      color={color}
+    >
+      <Path
+        d="M16 18H20"
+        stroke={color}
+        strokeWidth={1.5}
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+      <Path
+        d="M20 20V16C20 14.8954 19.1046 14 18 14C16.8954 14 16 14.8954 16 16V20"
+        stroke={color}
+        strokeWidth={1.5}
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+      <Path
+        d="M4 7.99997C4 7.99997 6.94596 4.00001 8.00003 4C9.05411 3.99999 12 8 12 8"
+        stroke={color}
+        strokeWidth={1.5}
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+      <Path
+        d="M8 5V20"
+        stroke={color}
+        strokeWidth={1.5}
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+      <Path
+        d="M16 4H18.365C19.2886 4 19.7504 4 19.8853 4.28792C20.0201 4.57584 19.7245 4.93062 19.1332 5.64018L16.8668 8.35982C16.2755 9.06938 15.9799 9.42416 16.1147 9.71208C16.2496 10 16.7114 10 17.635 10H20"
+        stroke={color}
+        strokeWidth={1.5}
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
     </Svg>
   );
 }
 
-export function GitCommitIcon({ size = 24, color = '#000' }: Props) {
+export function GitCommitIcon({ size = 24, color = "#000" }: Props) {
   return (
-    <Svg width={size} height={size} viewBox="0 0 24 24" fill="none" color={color}>
-      <Path d="M7 19H13C15.8284 19 17.2426 19 18.1213 18.1213C19 17.2426 19 15.8284 19 13V10M19 10C19.7002 10 21.0085 11.9943 21.5 12.5M19 10C18.2998 10 16.9915 11.9943 16.5 12.5" stroke={color} strokeWidth={1.5} strokeLinecap="round" strokeLinejoin="round" />
-      <Path d="M5 7L5 17" stroke={color} strokeWidth={1.5} strokeLinecap="round" strokeLinejoin="round" />
-      <Circle cx="5" cy="5" r="2" stroke={color} strokeWidth={1.5} strokeLinecap="round" strokeLinejoin="round" />
-      <Circle cx="19" cy="5" r="2" stroke={color} strokeWidth={1.5} strokeLinecap="round" strokeLinejoin="round" />
-      <Circle cx="5" cy="19" r="2" stroke={color} strokeWidth={1.5} strokeLinecap="round" strokeLinejoin="round" />
+    <Svg
+      width={size}
+      height={size}
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke={color}
+      strokeWidth={1.5}
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      color={color}
+    >
+      <Circle cx="12" cy="12" r="3" stroke={color} />
+      <Path d="M9 12H3M15 12H21" stroke={color} />
     </Svg>
   );
 }
 
-export function CodeDiffIcon({ size = 24, color = '#000' }: Props) {
+export function BranchIcon({ size = 24, color = "#000" }: Props) {
   return (
-    <Svg width={size} height={size} viewBox="0 0 24 24" fill="none" color={color}>
-      <Path d="M5.9925 12V18M9 14.9925L3 14.9925" stroke={color} strokeWidth={1.5} strokeLinecap="round" strokeLinejoin="round" />
-      <Path d="M3 22H9" stroke={color} strokeWidth={1.5} strokeLinecap="round" strokeLinejoin="round" />
-      <Path d="M13 22C16.7712 22 18.6569 22 19.8284 20.8284C21 19.6569 21 17.7712 21 14V10.6569C21 9.83935 21 9.4306 20.8478 9.06306C20.6955 8.69552 20.4065 8.40649 19.8284 7.82843L15.0919 3.09188C14.593 2.593 14.3436 2.34355 14.0345 2.19575C13.9702 2.165 13.9044 2.13772 13.8372 2.11401C13.5141 2 13.1614 2 12.4558 2C9.21082 2 7.58831 2 6.48933 2.88607C6.26732 3.06508 6.06508 3.26731 5.88608 3.48933C5.14374 4.41003 5.02332 5.69818 5.00378 8M14 2.5V3C14 5.82843 14 7.24264 14.8787 8.12132C15.7574 9 17.1716 9 20 9H20.5" stroke={color} strokeWidth={1.5} strokeLinecap="round" strokeLinejoin="round" />
+    <Svg
+      width={size}
+      height={size}
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke={color}
+      strokeWidth={1.5}
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      color={color}
+    >
+      <Path
+        d="M7 19H13C15.8284 19 17.2426 19 18.1213 18.1213C19 17.2426 19 15.8284 19 13V10M19 10C19.7002 10 21.0085 11.9943 21.5 12.5M19 10C18.2998 10 16.9915 11.9943 16.5 12.5"
+        stroke={color}
+      />
+      <Path d="M5 7L5 17" stroke={color} />
+      <Circle cx="5" cy="5" r="2" stroke={color} />
+      <Circle cx="19" cy="5" r="2" stroke={color} />
+      <Circle cx="5" cy="19" r="2" stroke={color} />
     </Svg>
   );
 }
 
-export function TerminalIcon({ size = 24, color = '#000' }: Props) {
+export function CodeDiffIcon({ size = 24, color = "#000" }: Props) {
   return (
-    <Svg width={size} height={size} viewBox="0 0 24 24" fill="none" color={color}>
+    <Svg
+      width={size}
+      height={size}
+      viewBox="0 0 24 24"
+      fill="none"
+      color={color}
+    >
+      <Path
+        d="M5.9925 12V18M9 14.9925L3 14.9925"
+        stroke={color}
+        strokeWidth={1.5}
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+      <Path
+        d="M3 22H9"
+        stroke={color}
+        strokeWidth={1.5}
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+      <Path
+        d="M13 22C16.7712 22 18.6569 22 19.8284 20.8284C21 19.6569 21 17.7712 21 14V10.6569C21 9.83935 21 9.4306 20.8478 9.06306C20.6955 8.69552 20.4065 8.40649 19.8284 7.82843L15.0919 3.09188C14.593 2.593 14.3436 2.34355 14.0345 2.19575C13.9702 2.165 13.9044 2.13772 13.8372 2.11401C13.5141 2 13.1614 2 12.4558 2C9.21082 2 7.58831 2 6.48933 2.88607C6.26732 3.06508 6.06508 3.26731 5.88608 3.48933C5.14374 4.41003 5.02332 5.69818 5.00378 8M14 2.5V3C14 5.82843 14 7.24264 14.8787 8.12132C15.7574 9 17.1716 9 20 9H20.5"
+        stroke={color}
+        strokeWidth={1.5}
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+    </Svg>
+  );
+}
+
+export function TerminalIcon({ size = 24, color = "#000" }: Props) {
+  return (
+    <Svg
+      width={size}
+      height={size}
+      viewBox="0 0 24 24"
+      fill="none"
+      color={color}
+    >
       <Path
         d="M8.7587 3H15.2413C16.0463 2.99999 16.7106 2.99998 17.2518 3.04419C17.8139 3.09012 18.3306 3.18868 18.816 3.43597C19.5686 3.81947 20.1805 4.43139 20.564 5.18404C20.8113 5.66937 20.9099 6.18608 20.9558 6.74817C21 7.28936 21 7.95372 21 8.75868V15.2413C21 16.0463 21 16.7106 20.9558 17.2518C20.9099 17.8139 20.8113 18.3306 20.564 18.816C20.1805 19.5686 19.5686 20.1805 18.816 20.564C18.3306 20.8113 17.8139 20.9099 17.2518 20.9558C16.7106 21 16.0463 21 15.2413 21H8.75868C7.95372 21 7.28936 21 6.74817 20.9558C6.18608 20.9099 5.66937 20.8113 5.18404 20.564C4.43139 20.1805 3.81947 19.5686 3.43597 18.816C3.18868 18.3306 3.09012 17.8139 3.04419 17.2518C2.99998 16.7106 2.99999 16.0463 3 15.2413V8.7587C2.99999 7.95373 2.99998 7.28937 3.04419 6.74817C3.09012 6.18608 3.18868 5.66937 3.43597 5.18404C3.81947 4.43139 4.43139 3.81947 5.18404 3.43597C5.66937 3.18868 6.18608 3.09012 6.74817 3.04419C7.28937 2.99998 7.95373 2.99999 8.7587 3ZM6.91104 5.03755C6.47262 5.07337 6.24842 5.1383 6.09202 5.21799C5.7157 5.40973 5.40973 5.7157 5.21799 6.09202C5.1383 6.24842 5.07337 6.47262 5.03755 6.91104C5.00078 7.36113 5 7.94342 5 8.8V15.2C5 16.0566 5.00078 16.6389 5.03755 17.089C5.07337 17.5274 5.1383 17.7516 5.21799 17.908C5.40973 18.2843 5.7157 18.5903 6.09202 18.782C6.24842 18.8617 6.47262 18.9266 6.91104 18.9624C7.36113 18.9992 7.94342 19 8.8 19H15.2C16.0566 19 16.6389 18.9992 17.089 18.9624C17.5274 18.9266 17.7516 18.8617 17.908 18.782C18.2843 18.5903 18.5903 18.2843 18.782 17.908C18.8617 17.7516 18.9266 17.5274 18.9624 17.089C18.9992 16.6389 19 16.0566 19 15.2V8.8C19 7.94342 18.9992 7.36113 18.9624 6.91104C18.9266 6.47262 18.8617 6.24842 18.782 6.09202C18.5903 5.7157 18.2843 5.40973 17.908 5.21799C17.7516 5.1383 17.5274 5.07337 17.089 5.03755C16.6389 5.00078 16.0566 5 15.2 5H8.8C7.94342 5 7.36113 5.00078 6.91104 5.03755ZM7.29289 9.29289C7.68342 8.90237 8.31658 8.90237 8.70711 9.29289L10.7071 11.2929C11.0976 11.6834 11.0976 12.3166 10.7071 12.7071L8.70711 14.7071C8.31658 15.0976 7.68342 15.0976 7.29289 14.7071C6.90237 14.3166 6.90237 13.6834 7.29289 13.2929L8.58579 12L7.29289 10.7071C6.90237 10.3166 6.90237 9.68342 7.29289 9.29289ZM12 14C12 13.4477 12.4477 13 13 13H16C16.5523 13 17 13.4477 17 14C17 14.5523 16.5523 15 16 15H13C12.4477 15 12 14.5523 12 14Z"
         fill={color}
+      />
+    </Svg>
+  );
+}
+
+export function QrCodeIcon({ size = 24, color = "#000" }: Props) {
+  return (
+    <Svg
+      width={size}
+      height={size}
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke={color}
+      strokeWidth={1.5}
+      color={color}
+    >
+      <Path
+        d="M3 6C3 4.58579 3 3.87868 3.43934 3.43934C3.87868 3 4.58579 3 6 3C7.41421 3 8.12132 3 8.56066 3.43934C9 3.87868 9 4.58579 9 6C9 7.41421 9 8.12132 8.56066 8.56066C8.12132 9 7.41421 9 6 9C4.58579 9 3.87868 9 3.43934 8.56066C3 8.12132 3 7.41421 3 6Z"
+        stroke={color}
+      />
+      <Path
+        d="M3 18C3 16.5858 3 15.8787 3.43934 15.4393C3.87868 15 4.58579 15 6 15C7.41421 15 8.12132 15 8.56066 15.4393C9 15.8787 9 16.5858 9 18C9 19.4142 9 20.1213 8.56066 20.5607C8.12132 21 7.41421 21 6 21C4.58579 21 3.87868 21 3.43934 20.5607C3 20.1213 3 19.4142 3 18Z"
+        stroke={color}
+      />
+      <Path d="M3 12L9 12" stroke={color} />
+      <Path d="M12 3V8" stroke={color} />
+      <Path
+        d="M15 6C15 4.58579 15 3.87868 15.4393 3.43934C15.8787 3 16.5858 3 18 3C19.4142 3 20.1213 3 20.5607 3.43934C21 3.87868 21 4.58579 21 6C21 7.41421 21 8.12132 20.5607 8.56066C20.1213 9 19.4142 9 18 9C16.5858 9 15.8787 9 15.4393 8.56066C15 8.12132 15 7.41421 15 6Z"
+        stroke={color}
+      />
+      <Path
+        d="M21 12H15C13.5858 12 12.8787 12 12.4393 12.4393C12 12.8787 12 13.5858 12 15M12 17.7692V20.5385M15 15V16.5C15 17.9464 15.7837 18 17 18C17.5523 18 18 18.4477 18 19M16 21H15M18 15C19.4142 15 20.1213 15 20.5607 15.44C21 15.8799 21 16.5881 21 18.0043C21 19.4206 21 20.1287 20.5607 20.5687C20.24 20.8898 19.7767 20.9766 19 21"
+        stroke={color}
+      />
+    </Svg>
+  );
+}
+
+export function LaptopCloudIcon({ size = 24, color = "#000" }: Props) {
+  return (
+    <Svg
+      width={size}
+      height={size}
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke={color}
+      strokeWidth={1.5}
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      color={color}
+    >
+      <Path
+        d="M16 3H8C5.17157 3 3.75736 3 2.87868 3.87868C2 4.75736 2 6.17157 2 9V11C2 13.8284 2 15.2426 2.87868 16.1213C3.75736 17 5.17157 17 8 17H16C18.8284 17 20.2426 17 21.1213 16.1213C22 15.2426 22 13.8284 22 11V9C22 6.17157 22 4.75736 21.1213 3.87868C20.2426 3 18.8284 3 16 3Z"
+        stroke={color}
+      />
+      <Path
+        d="M14 9C14 7.89543 13.1046 7 12 7C10.8954 7 10 7.89543 10 9H9.5C8.39543 9 7.5 9.89543 7.5 11C7.5 12.1046 8.39543 13 9.5 13H14.5C15.6046 13 16.5 12.1046 16.5 11C16.5 9.89543 15.6046 9 14.5 9H14Z"
+        stroke={color}
+      />
+      <Path
+        d="M14 21H16M14 21C13.1716 21 12.5 20.3284 12.5 19.5V17L12 17M14 21H10M10 21H8M10 21C10.8284 21 11.5 20.3284 11.5 19.5V17L12 17M12 17V21"
+        stroke={color}
+      />
+    </Svg>
+  );
+}
+
+export function LaptopIcon({ size = 24, color = "#000" }: Props) {
+  return (
+    <Svg
+      width={size}
+      height={size}
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke={color}
+      strokeWidth={1.5}
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      color={color}
+    >
+      <Path
+        d="M20.4999 16.5V8.5C20.4999 6.14298 20.4999 4.96447 19.7676 4.23223C19.0354 3.5 17.8569 3.5 15.4999 3.5H8.49988C6.14286 3.5 4.96434 3.5 4.23211 4.23223C3.49988 4.96447 3.49988 6.14298 3.49988 8.5V16.5"
+        stroke={color}
+      />
+      <Path
+        d="M21.9841 20.5H2.01567C1.63273 20.5 1.38367 20.1088 1.55493 19.7764L3.49988 16.5H20.4999L22.4448 19.7764C22.6161 20.1088 22.367 20.5 21.9841 20.5Z"
+        stroke={color}
+      />
+    </Svg>
+  );
+}
+
+export function ShieldIcon({ size = 24, color = "#000" }: Props) {
+  return (
+    <Svg
+      width={size}
+      height={size}
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke={color}
+      strokeWidth={1.5}
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      color={color}
+    >
+      <Path
+        d="M18.7088 3.49534C16.8165 2.55382 14.5009 2 12 2C9.4991 2 7.1835 2.55382 5.29116 3.49534C4.36318 3.95706 3.89919 4.18792 3.4496 4.91378C3 5.63965 3 6.34248 3 7.74814V11.2371C3 16.9205 7.54236 20.0804 10.173 21.4338C10.9067 21.8113 11.2735 22 12 22C12.7265 22 13.0933 21.8113 13.8269 21.4338C16.4576 20.0804 21 16.9205 21 11.2371L21 7.74814C21 6.34249 21 5.63966 20.5504 4.91378C20.1008 4.18791 19.6368 3.95706 18.7088 3.49534Z"
+        stroke={color}
       />
     </Svg>
   );

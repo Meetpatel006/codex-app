@@ -19,12 +19,12 @@ import { ThemedText } from "@/components/themed-text";
 export interface DropdownOption {
   label: string;
   value: string;
-  icon?: { ios: string; android: string; web: string };
+  icon?: { ios: string; android: string; web: string } | React.ReactNode;
 }
 
 export interface DropdownMenuProps {
   label: string;
-  icon?: { ios: string; android: string; web: string };
+  icon?: { ios: string; android: string; web: string } | React.ReactNode;
   options?: DropdownOption[];
   onSelect?: (option: DropdownOption) => void;
   style?: ViewStyle;
@@ -96,14 +96,17 @@ export function DropdownMenu({
         ]}
       >
         <View style={styles.content}>
-          {icon && (
-            <SymbolView
-              name={icon as any}
-              tintColor={theme.textSecondary}
-              size={14}
-              style={styles.icon}
-            />
-          )}
+          {icon &&
+            (React.isValidElement(icon) ? (
+              <View style={styles.icon}>{icon}</View>
+            ) : (
+              <SymbolView
+                name={icon as any}
+                tintColor={theme.textSecondary}
+                size={14}
+                style={styles.icon}
+              />
+            ))}
           <ThemedText style={[styles.label, labelStyle]} type="small">
             {label}
           </ThemedText>
@@ -154,14 +157,17 @@ export function DropdownMenu({
                   ]}
                   onPress={() => handleSelect(option)}
                 >
-                  {option.icon && (
-                    <SymbolView
-                      name={option.icon as any}
-                      tintColor={theme.textSecondary}
-                      size={16}
-                      style={styles.optionIcon}
-                    />
-                  )}
+                  {option.icon &&
+                    (React.isValidElement(option.icon) ? (
+                      <View style={styles.optionIcon}>{option.icon}</View>
+                    ) : (
+                      <SymbolView
+                        name={option.icon as any}
+                        tintColor={theme.textSecondary}
+                        size={16}
+                        style={styles.optionIcon}
+                      />
+                    ))}
                   <ThemedText style={styles.optionLabel} numberOfLines={1}>
                     {option.label}
                   </ThemedText>

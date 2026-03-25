@@ -1,5 +1,10 @@
-import { router } from "expo-router";
-import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import React, {
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
 import { Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
 
 import { MessageBubble } from "@/components/MessageBubble";
@@ -7,9 +12,15 @@ import { PresenceIndicator } from "@/components/PresenceIndicator";
 import { SessionTranscriptLoader } from "@/components/SessionTranscriptLoader";
 import { ProjectSidebar } from "@/components/ProjectSidebar";
 import { PromptInput } from "@/components/prompt-input";
-import { MenuIcon, GitCommitIcon, CodeDiffIcon } from "@/components/icons/Icon";
+import {
+  MenuIcon,
+  GitCommitIcon,
+  CodeDiffIcon,
+  QrCodeIcon,
+} from "@/components/icons/Icon";
 import { CodeDiffView } from "@/components/code-diff-view";
 import { GitCommitView } from "@/components/git-commit-view";
+import { PairDeviceView } from "@/components/pair-device-view";
 import { BottomSheet } from "@/components/ui/bottom-sheet";
 import { SidePanel } from "@/components/ui/side-panel";
 import { buildRequest } from "@/services/jsonrpc";
@@ -236,10 +247,15 @@ function mergeFileChanges(fileChanges: FileChangeData[]) {
       continue;
     }
 
-    existing.additions = (existing.additions || 0) + (fileChange.additions || 0);
-    existing.deletions = (existing.deletions || 0) + (fileChange.deletions || 0);
+    existing.additions =
+      (existing.additions || 0) + (fileChange.additions || 0);
+    existing.deletions =
+      (existing.deletions || 0) + (fileChange.deletions || 0);
     existing.diff = fileChange.diff || existing.diff;
-    existing.action = resolvePreferredAction(existing.action, fileChange.action);
+    existing.action = resolvePreferredAction(
+      existing.action,
+      fileChange.action,
+    );
   }
 
   return Array.from(merged.values());
@@ -469,6 +485,7 @@ export default function ChatScreen() {
   const activeSessionId = useSessionStore((state) => state.activeSessionId);
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [commitSheetOpen, setCommitSheetOpen] = useState(false);
+  const [pairSheetOpen, setPairSheetOpen] = useState(false);
   const [commitStatusText, setCommitStatusText] = useState("");
   const [commitSubmitting, setCommitSubmitting] = useState(false);
   const [commitBranch, setCommitBranch] = useState("-");
@@ -971,12 +988,12 @@ export default function ChatScreen() {
   useEffect(() => {
     async function connect() {
       if (!pairing) {
-        router.replace("/pair");
+        setPairSheetOpen(true);
         return;
       }
 
       if (pairing.expiryMs < Date.now()) {
-        router.replace("/pair");
+        setPairSheetOpen(true);
         return;
       }
 
@@ -1059,45 +1076,64 @@ export default function ChatScreen() {
             <Pressable
               onPress={() => setSidebarOpen(true)}
               style={[
-                styles.sessionButton,
+                styles.sidebarIconButton,
                 {
                   backgroundColor: theme.backgroundElement,
                   borderColor: theme.backgroundSelected,
                 },
               ]}
               accessibilityLabel="Open sidebar"
+              hitSlop={8}
             >
-              <MenuIcon size={16} color={theme.text} />
+              <MenuIcon size={22} color={theme.text} />
             </Pressable>
             <Text style={[styles.title, { color: theme.text }]}>Chat</Text>
             <View style={styles.headerIcons}>
-              <Pressable
-                onPress={() => setCommitSheetOpen(true)}
+              <View
                 style={StyleSheet.flatten([
-                  styles.headerIconButton,
+                  styles.headerActionPill,
                   {
                     backgroundColor: theme.backgroundElement,
                     borderColor: theme.backgroundSelected,
                   },
                 ])}
-                accessibilityLabel="Open commit sheet"
-                hitSlop={8}
               >
-                <GitCommitIcon size={20} color={theme.text} />
-              </Pressable>
+                <Pressable
+                  onPress={() => setCommitSheetOpen(true)}
+                  style={styles.headerPillButton}
+                  accessibilityLabel="Open commit sheet"
+                  hitSlop={8}
+                >
+                  <GitCommitIcon size={22} color={theme.text} />
+                </Pressable>
+                <View
+                  style={[
+                    styles.headerPillSeparator,
+                    { backgroundColor: theme.backgroundSelected },
+                  ]}
+                />
+                <Pressable
+                  onPress={openDiffPanel}
+                  style={styles.headerPillButton}
+                  accessibilityLabel="Open diff panel"
+                  hitSlop={8}
+                >
+                  <CodeDiffIcon size={22} color={theme.text} />
+                </Pressable>
+              </View>
               <Pressable
-                onPress={openDiffPanel}
+                onPress={() => setPairSheetOpen(true)}
                 style={StyleSheet.flatten([
-                  styles.headerIconButton,
+                  styles.headerStandaloneButton,
                   {
                     backgroundColor: theme.backgroundElement,
                     borderColor: theme.backgroundSelected,
                   },
                 ])}
-                accessibilityLabel="Open diff panel"
+                accessibilityLabel="Open pair device sheet"
                 hitSlop={8}
               >
-                <CodeDiffIcon size={20} color={theme.text} />
+                <QrCodeIcon size={22} color={theme.text} />
               </Pressable>
             </View>
           </View>
@@ -1171,6 +1207,13 @@ export default function ChatScreen() {
         />
       </BottomSheet>
 
+      <SidePanel
+        isVisible={pairSheetOpen}
+        onClose={() => setPairSheetOpen(false)}
+      >
+        <PairDeviceView onPaired={() => setPairSheetOpen(false)} />
+      </SidePanel>
+
       <SidePanel isVisible={isDiffPanelOpen} onClose={closeDiffPanel}>
         <CodeDiffView onClose={closeDiffPanel} />
       </SidePanel>
@@ -1194,31 +1237,50 @@ const styles = StyleSheet.create({
     justifyContent: "space-between",
     alignItems: "center",
     gap: 12,
+    minHeight: 44,
   },
   headerIcons: {
     flexDirection: "row",
-    gap: 8,
     alignItems: "center",
+    gap: 8,
   },
   presenceRow: {
     flexDirection: "row",
     justifyContent: "flex-end",
   },
-  headerIconButton: {
-    minWidth: 36,
-    minHeight: 36,
-    paddingHorizontal: 8,
-    paddingVertical: 6,
-    borderRadius: 8,
+  sidebarIconButton: {
+    width: 42,
+    height: 42,
+    borderRadius: 21,
     borderWidth: 1,
     alignItems: "center",
     justifyContent: "center",
   },
-  sessionButton: {
-    paddingHorizontal: 10,
-    paddingVertical: 6,
-    borderRadius: 8,
+  headerActionPill: {
+    minHeight: 42,
+    borderRadius: 21,
     borderWidth: 1,
+    flexDirection: "row",
+    alignItems: "center",
+    overflow: "hidden",
+  },
+  headerPillButton: {
+    width: 44,
+    height: 42,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  headerPillSeparator: {
+    width: 1,
+    height: 22,
+  },
+  headerStandaloneButton: {
+    width: 42,
+    height: 42,
+    borderRadius: 21,
+    borderWidth: 1,
+    alignItems: "center",
+    justifyContent: "center",
   },
   sessionButtonText: {
     fontSize: 13,
