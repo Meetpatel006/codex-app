@@ -1,4 +1,3 @@
-
 export type MarkdownSegment =
   | { type: "prose"; content: string }
   | { type: "codeBlock"; language: string; content: string; isDiff?: boolean };
@@ -10,16 +9,22 @@ export function parseMarkdownSegments(text: string): MarkdownSegment[] {
 
   while (i < lines.length) {
     const line = lines[i];
+    const fenceMatch = line.match(/^\s*(`{3,}|~{3,})(.*)$/);
 
-    // Check for fenced code block
-    const fenceMatch = line.match(/^```(\w*)/);
     if (fenceMatch) {
-      const language = fenceMatch[1] || "";
+      const openingFence = fenceMatch[1];
+      const info = fenceMatch[2].trim();
+      const language = info ? info.split(/\s+/)[0] : "";
+      const fenceChar = openingFence[0];
+      const minFenceLength = openingFence.length;
       const codeLines: string[] = [];
-      i++; // Skip opening fence
+      i++;
 
-      // Collect code block content
-      while (i < lines.length && !lines[i].startsWith("```")) {
+      const closingFenceRegex = new RegExp(
+        `^\\s*${fenceChar}{${minFenceLength},}\\s*$`,
+      );
+
+      while (i < lines.length && !closingFenceRegex.test(lines[i])) {
         codeLines.push(lines[i]);
         i++;
       }
@@ -34,13 +39,14 @@ export function parseMarkdownSegments(text: string): MarkdownSegment[] {
         isDiff,
       });
 
-      i++; // Skip closing fence
+      if (i < lines.length) {
+        i++;
+      }
       continue;
     }
 
-    // Collect prose until next code block
     const proseLines: string[] = [];
-    while (i < lines.length && !lines[i].startsWith("```")) {
+    while (i < lines.length && !/^\s*(`{3,}|~{3,})(.*)$/.test(lines[i])) {
       proseLines.push(lines[i]);
       i++;
     }
@@ -58,7 +64,6 @@ export function parseMarkdownSegments(text: string): MarkdownSegment[] {
 
   return segments;
 }
-
 
 function detectDiff(code: string): boolean {
   const lines = code.split("\n");

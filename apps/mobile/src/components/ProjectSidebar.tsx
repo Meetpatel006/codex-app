@@ -279,9 +279,6 @@ export const ProjectSidebar: React.FC<ProjectSidebarProps> = ({
                       }}
                       style={({ pressed }) => [
                         themedStyles.menuItem,
-                        activeProjectId === project.id && {
-                          backgroundColor: colors.backgroundSelected,
-                        },
                         pressed && {
                           backgroundColor: colors.backgroundElement,
                         },

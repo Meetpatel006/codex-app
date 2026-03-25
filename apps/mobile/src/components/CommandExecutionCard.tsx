@@ -19,7 +19,6 @@ type Props = {
   output?: string;
 };
 
-
 export function CommandExecutionCard({
   command,
   status,
@@ -210,7 +209,7 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     backgroundColor: "#1a1a1a",
     borderRadius: 8,
-    marginVertical: 6,
+    marginVertical: 0,
     overflow: "hidden",
   },
   accentBar: {

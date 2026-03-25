@@ -43,16 +43,18 @@ export function CodeBlockView({ language, code }: Props) {
 const createStyles = (colors: ReturnType<typeof useTheme>) =>
   StyleSheet.create({
     container: {
-      borderRadius: 8,
+      borderRadius: 12,
       overflow: "hidden",
-      marginVertical: 8,
+      marginVertical: 10,
+      borderWidth: 1,
+      borderColor: colors.codeBorder,
     },
     header: {
       flexDirection: "row",
       justifyContent: "space-between",
       alignItems: "center",
-      paddingHorizontal: 12,
-      paddingVertical: 8,
+      paddingHorizontal: 14,
+      paddingVertical: 9,
       backgroundColor: colors.codeHeaderBackground,
     },
     languageLabel: {
@@ -62,7 +64,7 @@ const createStyles = (colors: ReturnType<typeof useTheme>) =>
       textTransform: "lowercase",
     },
     copyButton: {
-      paddingHorizontal: 8,
+      paddingHorizontal: 10,
       paddingVertical: 4,
     },
     copyButtonText: {
@@ -72,13 +74,13 @@ const createStyles = (colors: ReturnType<typeof useTheme>) =>
     },
     codeContainer: {
       backgroundColor: colors.codeBackground,
-      paddingHorizontal: 12,
-      paddingVertical: 12,
+      paddingHorizontal: 14,
+      paddingVertical: 14,
     },
     code: {
       color: colors.codeText,
       fontSize: 13,
       fontFamily: "monospace",
-      lineHeight: 18,
+      lineHeight: 20,
     },
   });

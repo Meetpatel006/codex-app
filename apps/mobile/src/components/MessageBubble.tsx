@@ -188,7 +188,7 @@ const createStyles = (colors: ReturnType<typeof useTheme>) =>
     // User message styles
     userWrapper: {
       alignItems: "flex-end",
-      marginVertical: 10,
+      marginVertical: 0,
     },
     userBubble: {
       maxWidth: "85%",
@@ -224,14 +224,15 @@ const createStyles = (colors: ReturnType<typeof useTheme>) =>
     // Assistant message styles
     assistantWrapper: {
       alignItems: "flex-start",
-      marginVertical: 10,
-      maxWidth: "95%",
+      marginVertical: 0,
+      width: "100%",
+      maxWidth: 760,
     },
 
     // System message styles
     systemWrapper: {
       alignItems: "flex-start",
-      marginVertical: 6,
+      marginVertical: 0,
       paddingHorizontal: 8,
     },
     systemText: {
