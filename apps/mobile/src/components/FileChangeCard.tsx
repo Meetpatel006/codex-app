@@ -1,14 +1,17 @@
 import React, { useMemo, useState } from "react";
 import { Pressable, StyleSheet, View } from "react-native";
+import { Image } from "expo-image";
 
 import { FolderIcon } from "@/components/icons/Icon";
 import { ThemedText } from "@/components/themed-text";
+import { useColorScheme } from "@/hooks/use-color-scheme";
 import { useTheme } from "@/hooks/use-theme";
 import type { FileChangeData } from "@/store/chat";
 import { useDiffStore } from "@/store/diff";
 import { useSessionStore } from "@/store/session";
 import { useUiStore } from "@/store/ui";
 import { parseUnifiedDiff } from "@/utils/diff";
+import { getVscodeIconUrlForEntry } from "@/utils/vscode-icons";
 
 type Props = {
   changes: FileChangeData[];
@@ -30,6 +33,7 @@ type FileGroup = {
 
 export function FileChangeCard({ changes }: Props) {
   const colors = useTheme();
+  const colorScheme = useColorScheme();
   const activeSessionId = useSessionStore((state) => state.activeSessionId);
   const diffSession = useDiffStore((state) =>
     activeSessionId ? state.sessions[activeSessionId] : undefined,
@@ -186,7 +190,19 @@ export function FileChangeCard({ changes }: Props) {
                         >
                           <View style={styles.fileMain}>
                             <View style={styles.fileTextBlock}>
-                              <ThemedText style={styles.fileName}>
+                              <Image
+                                source={getVscodeIconUrlForEntry(
+                                  file.normalizedPath,
+                                  "file",
+                                  colorScheme === "dark" ? "dark" : "light",
+                                )}
+                                style={styles.fileIcon}
+                                contentFit="contain"
+                              />
+                              <ThemedText
+                                style={styles.fileName}
+                                numberOfLines={1}
+                              >
                                 {file.fileName}
                               </ThemedText>
                             </View>
@@ -387,14 +403,20 @@ const createStyles = (colors: ReturnType<typeof useTheme>) =>
     fileMain: {
       flexDirection: "row",
       alignItems: "center",
-      gap: 0,
+      gap: 8,
       flex: 1,
       minWidth: 0,
     },
     fileTextBlock: {
+      flexDirection: "row",
+      alignItems: "center",
+      gap: 6,
       flex: 1,
       minWidth: 0,
-      gap: 2,
+    },
+    fileIcon: {
+      width: 14,
+      height: 14,
     },
     fileName: {
       color: colors.text,
