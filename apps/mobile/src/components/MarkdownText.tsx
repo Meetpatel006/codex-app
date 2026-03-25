@@ -447,6 +447,19 @@ function renderToken(
         [textStyle, styles.italic],
       );
     case "code":
+      if (token.content.length > 28) {
+        return (
+          <View
+            key={`code-${index}`}
+            style={[styles.inlineCode, styles.inlineCodeMultiline]}
+          >
+            <Text style={[textStyle, styles.inlineCodeText]}>
+              {wrapInlineCode(token.content, 28)}
+            </Text>
+          </View>
+        );
+      }
+
       return (
         <View key={`code-${index}`} style={styles.inlineCode}>
           <Text style={[textStyle, styles.inlineCodeText]}>{token.content}</Text>
@@ -482,6 +495,29 @@ function renderToken(
         [textStyle, styles.textInline],
       );
   }
+}
+
+function wrapInlineCode(content: string, maxLineLength: number): string {
+  const chunks = content.split(/(\s+)/);
+  const lines: string[] = [];
+  let current = "";
+
+  for (const chunk of chunks) {
+    const next = current + chunk;
+    if (next.length <= maxLineLength || current.trim().length === 0) {
+      current = next;
+      continue;
+    }
+
+    lines.push(current.trimEnd());
+    current = chunk.trimStart();
+  }
+
+  if (current.length > 0) {
+    lines.push(current.trimEnd());
+  }
+
+  return lines.join("\n");
 }
 
 function renderWrappedTextSegments(
@@ -633,6 +669,16 @@ const createStyles = (colors: ReturnType<typeof useTheme>) =>
       borderRadius: 999,
       overflow: "hidden",
       justifyContent: "center",
+      maxWidth: "100%",
+      flexShrink: 1,
+      minWidth: 0,
+    },
+    inlineCodeMultiline: {
+      flexBasis: "100%",
+      alignSelf: "stretch",
+      borderRadius: 12,
+      paddingVertical: 6,
+      marginVertical: 4,
     },
     inlineCodeText: {
       color: colors.codeText,
@@ -641,6 +687,7 @@ const createStyles = (colors: ReturnType<typeof useTheme>) =>
       lineHeight: 18,
       includeFontPadding: false,
       textAlignVertical: "center",
+      flexShrink: 1,
     },
     link: {
       color: colors.linkColor,

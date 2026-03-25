@@ -1,278 +1,419 @@
-import React, { useState } from "react";
-import {
-  Modal,
-  Pressable,
-  ScrollView,
-  StyleSheet,
-  Text,
-  View,
-} from "react-native";
+import React, { useMemo, useState } from "react";
+import { Pressable, StyleSheet, View } from "react-native";
+
+import { FolderIcon } from "@/components/icons/Icon";
+import { ThemedText } from "@/components/themed-text";
+import { useTheme } from "@/hooks/use-theme";
+import type { FileChangeData } from "@/store/chat";
 import { useDiffStore } from "@/store/diff";
 import { useSessionStore } from "@/store/session";
 import { useUiStore } from "@/store/ui";
 import { parseUnifiedDiff } from "@/utils/diff";
-import { DiffBlockView } from "./DiffBlockView";
-
-type FileAction = "created" | "edited" | "deleted" | "renamed" | "moved";
-
-type FileChange = {
-  path: string;
-  action: FileAction;
-  additions?: number;
-  deletions?: number;
-  diff?: string;
-};
 
 type Props = {
-  changes: FileChange[];
+  changes: FileChangeData[];
+};
+
+type DisplayChange = FileChangeData & {
+  normalizedPath: string;
+  directory: string;
+  fileName: string;
+};
+
+type FileGroup = {
+  key: string;
+  label: string;
+  files: DisplayChange[];
+  additions: number;
+  deletions: number;
 };
 
 export function FileChangeCard({ changes }: Props) {
-  const [selectedFile, setSelectedFile] = useState<FileChange | null>(null);
+  const colors = useTheme();
   const activeSessionId = useSessionStore((state) => state.activeSessionId);
+  const diffSession = useDiffStore((state) =>
+    activeSessionId ? state.sessions[activeSessionId] : undefined,
+  );
   const setDiffSnapshot = useDiffStore((state) => state.setDiffSnapshot);
-  const selectFile = useDiffStore((state) => state.selectFile);
   const openDiffPanel = useUiStore((state) => state.openDiffPanel);
+  const [expandedGroups, setExpandedGroups] = useState<Record<string, boolean>>(
+    {},
+  );
+  const styles = useMemo(() => createStyles(colors), [colors]);
 
-  // Group changes by action
-  const groupedChanges = changes.reduce(
-    (acc, change) => {
-      const action = change.action;
-      if (!acc[action]) {
-        acc[action] = [];
+  const displayChanges = useMemo(() => {
+    const snapshotFiles = diffSession?.files || [];
+    if (snapshotFiles.length > 0) {
+      const snapshotChanges = snapshotFiles.map((file) => ({
+        path: file.path,
+        action: file.status,
+        additions: file.additions,
+        deletions: file.deletions,
+        diff: file.diff,
+      }));
+      const snapshotPaths = new Set(
+        snapshotChanges.map((file) => normalizePath(file.path)),
+      );
+      const messagePaths = changes.map((file) => normalizePath(file.path));
+      const sameFiles =
+        messagePaths.length > 0 &&
+        messagePaths.every((path) => snapshotPaths.has(path)) &&
+        snapshotChanges.length === messagePaths.length;
+
+      if (sameFiles || changes.length === 0) {
+        return snapshotChanges;
       }
-      acc[action].push(change);
-      return acc;
-    },
-    {} as Record<FileAction, FileChange[]>,
+    }
+
+    return changes;
+  }, [changes, diffSession?.files]);
+
+  const normalizedChanges = useMemo<DisplayChange[]>(
+    () =>
+      displayChanges.map((change) => {
+        const normalizedPath = normalizePath(change.path);
+        return {
+          ...change,
+          normalizedPath,
+          directory: getFileDirectory(normalizedPath),
+          fileName: getFileName(normalizedPath),
+        };
+      }),
+    [displayChanges],
   );
 
-  function openInDiffPanel(file: FileChange) {
-    if (!activeSessionId || !file.diff) {
+  const summary = useMemo(
+    () =>
+      normalizedChanges.reduce(
+        (acc, change) => {
+          acc.additions += change.additions || 0;
+          acc.deletions += change.deletions || 0;
+          return acc;
+        },
+        { additions: 0, deletions: 0 },
+      ),
+    [normalizedChanges],
+  );
+
+  const groups = useMemo(
+    () => buildGroups(normalizedChanges),
+    [normalizedChanges],
+  );
+
+  function handleOpenFileDiff(file: DisplayChange) {
+    if (!file.diff) {
       return;
     }
 
-    const parsedFiles = parseUnifiedDiff(file.diff);
-    if (parsedFiles.length === 0) {
-      return;
+    if (activeSessionId) {
+      const parsedFiles = parseUnifiedDiff(file.diff);
+      if (parsedFiles.length > 0) {
+        setDiffSnapshot(activeSessionId, parsedFiles, {
+          preserveSelection: false,
+        });
+      }
     }
 
-    setDiffSnapshot(activeSessionId, parsedFiles, {
-      preserveSelection: false,
-    });
-    const matchedFile =
-      parsedFiles.find((item) => item.path === file.path) || parsedFiles[0];
-    selectFile(activeSessionId, matchedFile.id);
     openDiffPanel();
+  }
+
+  function toggleGroup(groupKey: string) {
+    setExpandedGroups((current) => ({
+      ...current,
+      [groupKey]: !(current[groupKey] ?? true),
+    }));
   }
 
   return (
     <>
       <View style={styles.card}>
-        {Object.entries(groupedChanges).map(([action, files]) => (
-          <View key={action} style={styles.actionGroup}>
-            <Text style={styles.actionLabel}>
-              {getActionLabel(action as FileAction)}
-            </Text>
-            {files.map((file, index) => (
-              <Pressable
-                key={index}
-                style={styles.fileRow}
-                onPress={() => file.diff && setSelectedFile(file)}
-              >
-                <Text style={styles.fileName} numberOfLines={1}>
-                  {getFileName(file.path)}
-                </Text>
-                {(file.additions !== undefined ||
-                  file.deletions !== undefined) && (
-                  <View style={styles.diffStats}>
-                    {file.additions !== undefined && (
-                      <Text style={styles.additions}>+{file.additions}</Text>
-                    )}
-                    {file.deletions !== undefined && (
-                      <Text style={styles.deletions}>-{file.deletions}</Text>
-                    )}
-                  </View>
-                )}
-                {file.diff && (
-                  <Pressable
-                    style={styles.diffButton}
-                    onPress={(event) => {
-                      event.stopPropagation();
-                      openInDiffPanel(file);
-                    }}
-                  >
-                    <Text style={styles.diffButtonText}>Open</Text>
-                  </Pressable>
-                )}
-              </Pressable>
-            ))}
-          </View>
-        ))}
-      </View>
-
-      {/* Diff Modal */}
-      {selectedFile && (
-        <Modal
-          visible={!!selectedFile}
-          animationType="slide"
-          presentationStyle="pageSheet"
-          onRequestClose={() => setSelectedFile(null)}
-        >
-          <View style={styles.modalContainer}>
-            {/* Header */}
-            <View style={styles.modalHeader}>
-              <View style={styles.modalTitleContainer}>
-                <Text style={styles.modalTitle}>
-                  {getFileName(selectedFile.path)}
-                </Text>
-                <Text style={styles.modalSubtitle}>{selectedFile.path}</Text>
-              </View>
-              <Pressable
-                onPress={() => setSelectedFile(null)}
-                style={styles.closeButton}
-              >
-                <Text style={styles.closeButtonText}>Done</Text>
-              </Pressable>
+        <View style={styles.headerRow}>
+          <View style={styles.titleBlock}>
+            <ThemedText style={styles.kicker}>
+              CHANGED FILES ({normalizedChanges.length})
+            </ThemedText>
+            <View style={styles.summaryRow}>
+              <ThemedText style={styles.additions}>
+                +{summary.additions}
+              </ThemedText>
+              <ThemedText style={styles.separator}>/</ThemedText>
+              <ThemedText style={styles.deletions}>
+                -{summary.deletions}
+              </ThemedText>
             </View>
-
-            <ScrollView style={styles.modalContent}>
-              {selectedFile.diff && (
-                <DiffBlockView
-                  language="diff"
-                  code={selectedFile.diff}
-                  onOpenDiff={() => openInDiffPanel(selectedFile)}
-                />
-              )}
-            </ScrollView>
           </View>
-        </Modal>
-      )}
+        </View>
+
+        <View style={styles.groupList}>
+          {groups.map((group) => {
+            const isExpanded = expandedGroups[group.key] ?? true;
+
+            return (
+              <View key={group.key} style={styles.groupCard}>
+                <Pressable
+                  style={styles.groupHeader}
+                  onPress={() => toggleGroup(group.key)}
+                >
+                  <View style={styles.groupHeaderLeft}>
+                    <FolderIcon size={15} color={colors.systemText} />
+                    <View style={styles.groupTextBlock}>
+                      <ThemedText style={styles.groupTitle}>
+                        {group.label}
+                      </ThemedText>
+                    </View>
+                  </View>
+                  <View style={styles.groupStats}>
+                    <ThemedText style={styles.additions}>
+                      +{group.additions}
+                    </ThemedText>
+                    <ThemedText style={styles.deletions}>
+                      -{group.deletions}
+                    </ThemedText>
+                  </View>
+                </Pressable>
+
+                {isExpanded ? (
+                  <View style={styles.fileList}>
+                    {group.files.map((file, index) => (
+                      <View
+                        key={file.normalizedPath}
+                        style={index > 0 ? styles.fileDivider : undefined}
+                      >
+                        <Pressable
+                          style={styles.fileRow}
+                          onPress={() => handleOpenFileDiff(file)}
+                          disabled={!file.diff}
+                        >
+                          <View style={styles.fileMain}>
+                            <View style={styles.fileTextBlock}>
+                              <ThemedText style={styles.fileName}>
+                                {file.fileName}
+                              </ThemedText>
+                            </View>
+                          </View>
+                          <View style={styles.fileRight}>
+                            <View style={styles.fileStats}>
+                              <ThemedText style={styles.additions}>
+                                +{file.additions || 0}
+                              </ThemedText>
+                              <ThemedText style={styles.deletions}>
+                                -{file.deletions || 0}
+                              </ThemedText>
+                            </View>
+                            {file.diff ? (
+                              <ThemedText style={styles.previewHint}>
+                                Preview
+                              </ThemedText>
+                            ) : null}
+                          </View>
+                        </Pressable>
+                      </View>
+                    ))}
+                  </View>
+                ) : null}
+              </View>
+            );
+          })}
+        </View>
+      </View>
     </>
   );
 }
 
-function getActionLabel(action: FileAction): string {
-  switch (action) {
-    case "created":
-      return "Created";
-    case "edited":
-      return "Edited";
-    case "deleted":
-      return "Deleted";
-    case "renamed":
-      return "Renamed";
-    case "moved":
-      return "Moved";
+function buildGroups(changes: DisplayChange[]): FileGroup[] {
+  const groups = new Map<string, FileGroup>();
+
+  for (const change of changes) {
+    const groupKey = change.directory || "workspace";
+    const existing = groups.get(groupKey);
+    if (!existing) {
+      groups.set(groupKey, {
+        key: groupKey,
+        label: groupKey,
+        files: [change],
+        additions: change.additions || 0,
+        deletions: change.deletions || 0,
+      });
+      continue;
+    }
+
+    existing.files.push(change);
+    existing.additions += change.additions || 0;
+    existing.deletions += change.deletions || 0;
   }
+
+  return Array.from(groups.values())
+    .map((group) => ({
+      ...group,
+      files: group.files.sort((left, right) =>
+        left.normalizedPath.localeCompare(right.normalizedPath),
+      ),
+    }))
+    .sort((left, right) => {
+      if (right.files.length !== left.files.length) {
+        return right.files.length - left.files.length;
+      }
+      return left.label.localeCompare(right.label);
+    });
 }
 
-function getFileName(path: string): string {
-  const parts = path.split("/");
+function getFileName(path: string) {
+  const parts = path.replace(/\\/g, "/").split("/");
   return parts[parts.length - 1] || path;
 }
 
-const styles = StyleSheet.create({
-  card: {
-    backgroundColor: "#1a1a1a",
-    borderRadius: 8,
-    padding: 12,
-    marginVertical: 6,
-  },
-  actionGroup: {
-    marginBottom: 12,
-  },
-  actionLabel: {
-    color: "#9f9f9f",
-    fontSize: 11,
-    fontWeight: "600",
-    textTransform: "uppercase",
-    marginBottom: 6,
-  },
-  fileRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    paddingVertical: 6,
-    paddingHorizontal: 8,
-    backgroundColor: "#141414",
-    borderRadius: 6,
-    marginBottom: 4,
-    gap: 8,
-  },
-  fileName: {
-    flex: 1,
-    color: "#f5f5f5",
-    fontSize: 14,
-    fontFamily: "monospace",
-  },
-  diffStats: {
-    flexDirection: "row",
-    gap: 6,
-  },
-  additions: {
-    color: "#6fdc8c",
-    fontSize: 12,
-    fontFamily: "monospace",
-    fontWeight: "600",
-  },
-  deletions: {
-    color: "#ff9d9d",
-    fontSize: 12,
-    fontFamily: "monospace",
-    fontWeight: "600",
-  },
-  diffButton: {
-    paddingHorizontal: 8,
-    paddingVertical: 4,
-    backgroundColor: "#2a2a2a",
-    borderRadius: 4,
-  },
-  diffButtonText: {
-    color: "#7fc7ff",
-    fontSize: 11,
-    fontWeight: "600",
-  },
+function getFileDirectory(path: string) {
+  const parts = path.split("/").filter(Boolean);
+  if (parts.length <= 1) {
+    return "";
+  }
+  return parts.slice(0, -1).join("/");
+}
 
-  // Modal styles
-  modalContainer: {
-    flex: 1,
-    backgroundColor: "#0b0b0b",
-  },
-  modalHeader: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    alignItems: "center",
-    paddingHorizontal: 16,
-    paddingVertical: 16,
-    borderBottomWidth: 1,
-    borderBottomColor: "#2f2f2f",
-  },
-  modalTitleContainer: {
-    flex: 1,
-  },
-  modalTitle: {
-    color: "#f0f0f0",
-    fontSize: 16,
-    fontWeight: "700",
-    fontFamily: "monospace",
-  },
-  modalSubtitle: {
-    color: "#9f9f9f",
-    fontSize: 12,
-    marginTop: 2,
-  },
-  closeButton: {
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-  },
-  closeButtonText: {
-    color: "#6fdc8c",
-    fontSize: 16,
-    fontWeight: "600",
-  },
-  modalContent: {
-    flex: 1,
-    paddingHorizontal: 16,
-    paddingTop: 16,
-  },
-});
+function normalizePath(path: string) {
+  return path.replace(/\\/g, "/");
+}
+
+const createStyles = (colors: ReturnType<typeof useTheme>) =>
+  StyleSheet.create({
+    card: {
+      width: "100%",
+      alignSelf: "stretch",
+      borderRadius: 18,
+      borderWidth: 1,
+      borderColor: colors.codeBorder,
+      backgroundColor: colors.codeBackground,
+      padding: 14,
+      gap: 12,
+    },
+    headerRow: {
+      flexDirection: "row",
+      alignItems: "flex-start",
+      justifyContent: "space-between",
+      gap: 10,
+    },
+    titleBlock: {
+      flexDirection: "row",
+      alignItems: "center",
+      flexWrap: "nowrap",
+      gap: 8,
+      flex: 1,
+    },
+    kicker: {
+      fontSize: 11,
+      lineHeight: 14,
+      fontWeight: "700",
+      letterSpacing: 0.8,
+      color: colors.systemText,
+    },
+    summaryRow: {
+      flexDirection: "row",
+      alignItems: "center",
+      gap: 4,
+    },
+    additions: {
+      color: colors.successColor,
+      fontSize: 11,
+      fontWeight: "700",
+    },
+    separator: {
+      color: colors.systemText,
+      fontSize: 11,
+    },
+    deletions: {
+      color: colors.errorColor,
+      fontSize: 11,
+      fontWeight: "700",
+    },
+    groupList: {
+      gap: 10,
+    },
+    groupCard: {
+      borderRadius: 16,
+      borderWidth: 1,
+      borderColor: colors.backgroundSelected,
+      backgroundColor: colors.background,
+      overflow: "hidden",
+    },
+    groupHeader: {
+      minHeight: 52,
+      flexDirection: "row",
+      alignItems: "center",
+      justifyContent: "space-between",
+      gap: 10,
+      paddingHorizontal: 12,
+      paddingVertical: 10,
+    },
+    groupHeaderLeft: {
+      flexDirection: "row",
+      alignItems: "center",
+      gap: 8,
+      flex: 1,
+      minWidth: 0,
+    },
+    groupTextBlock: {
+      flex: 1,
+      minWidth: 0,
+    },
+    groupTitle: {
+      color: colors.text,
+      fontSize: 12,
+      fontWeight: "700",
+      fontFamily: "monospace",
+    },
+    groupStats: {
+      flexDirection: "row",
+      alignItems: "center",
+      gap: 8,
+    },
+    fileList: {
+      borderTopWidth: 1,
+      borderTopColor: colors.backgroundSelected,
+      paddingBottom: 2,
+    },
+    fileDivider: {
+      borderTopWidth: 1,
+      borderTopColor: colors.backgroundSelected,
+    },
+    fileRow: {
+      flexDirection: "row",
+      alignItems: "center",
+      justifyContent: "space-between",
+      gap: 12,
+      paddingLeft: 16,
+      paddingRight: 12,
+      paddingVertical: 8,
+    },
+    fileMain: {
+      flexDirection: "row",
+      alignItems: "center",
+      gap: 0,
+      flex: 1,
+      minWidth: 0,
+    },
+    fileTextBlock: {
+      flex: 1,
+      minWidth: 0,
+      gap: 2,
+    },
+    fileName: {
+      color: colors.text,
+      fontSize: 12,
+      fontWeight: "700",
+      fontFamily: "monospace",
+    },
+    fileRight: {
+      alignItems: "flex-end",
+      gap: 3,
+    },
+    fileStats: {
+      flexDirection: "row",
+      alignItems: "center",
+      gap: 8,
+    },
+    previewHint: {
+      color: colors.fileMention,
+      fontSize: 10,
+      fontWeight: "600",
+    },
+  });

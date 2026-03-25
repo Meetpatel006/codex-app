@@ -15,7 +15,11 @@ import { SidePanel } from "@/components/ui/side-panel";
 import { buildRequest } from "@/services/jsonrpc";
 import { relayService } from "@/services/relay";
 import { useChatStore } from "@/store/chat";
-import type { ChatMessage, CommandExecutionData } from "@/store/chat";
+import type {
+  ChatMessage,
+  CommandExecutionData,
+  FileChangeData,
+} from "@/store/chat";
 import { useDiffStore } from "@/store/diff";
 import { useUiStore } from "@/store/ui";
 import { parseUnifiedDiff } from "@/utils/diff";
@@ -53,7 +57,43 @@ type RenderItem =
       type: "command-group";
       id: string;
       commands: CommandExecutionData[];
+    }
+  | {
+      type: "file-change-group";
+      id: string;
+      fileChanges: FileChangeData[];
     };
+
+type RelayMessageParams = {
+  delta?: string;
+  textDelta?: string;
+  text?: string;
+  chunk?: string;
+  message?: string;
+  id?: string;
+  threadId?: string;
+  turnId?: string;
+  itemId?: string;
+  item_id?: string;
+  call_id?: string;
+  callId?: string;
+  command?: string | string[];
+  cmd?: string | string[];
+  raw_command?: string;
+  rawCommand?: string;
+  cwd?: string;
+  working_directory?: string;
+  status?: string;
+  phase?: string;
+  exitCode?: number;
+  exit_code?: number;
+  output?: string;
+  durationMs?: number;
+  duration_ms?: number;
+  diff?: string;
+  fileChanges?: FileChangeData[];
+  msg?: Record<string, unknown> & RelayMessageParams;
+};
 
 function buildRenderItems(messages: ChatMessage[]): RenderItem[] {
   const items: RenderItem[] = [];
@@ -91,6 +131,44 @@ function buildRenderItems(messages: ChatMessage[]): RenderItem[] {
       continue;
     }
 
+    if (
+      message.role === "system" &&
+      message.kind === "file-change" &&
+      message.fileChanges &&
+      message.fileChanges.length > 0
+    ) {
+      const groupKey = getFileChangeGroupKey(message.fileChanges);
+      const groupedFileChanges: FileChangeData[] = [...message.fileChanges];
+      let nextIndex = index + 1;
+
+      while (nextIndex < messages.length) {
+        const nextMessage = messages[nextIndex];
+        if (
+          nextMessage.role !== "system" ||
+          nextMessage.kind !== "file-change" ||
+          !nextMessage.fileChanges ||
+          nextMessage.fileChanges.length === 0
+        ) {
+          break;
+        }
+
+        if (getFileChangeGroupKey(nextMessage.fileChanges) !== groupKey) {
+          break;
+        }
+
+        groupedFileChanges.push(...nextMessage.fileChanges);
+        nextIndex += 1;
+      }
+
+      items.push({
+        type: "file-change-group",
+        id: `file-change-group-${message.id}`,
+        fileChanges: mergeFileChanges(groupedFileChanges),
+      });
+      index = nextIndex - 1;
+      continue;
+    }
+
     items.push({
       type: "message",
       id: message.id,
@@ -99,6 +177,87 @@ function buildRenderItems(messages: ChatMessage[]): RenderItem[] {
   }
 
   return items;
+}
+
+function getFileChangeGroupKey(fileChanges: FileChangeData[]) {
+  const directories = fileChanges
+    .map((file) => getFileDirectory(file.path))
+    .filter(Boolean);
+
+  if (directories.length === 0) {
+    return "root";
+  }
+
+  let common = directories[0];
+  for (let index = 1; index < directories.length; index += 1) {
+    common = getCommonPathPrefix(common, directories[index]);
+    if (!common) {
+      break;
+    }
+  }
+
+  return common || directories[0] || "root";
+}
+
+function getFileDirectory(filePath: string) {
+  const normalized = filePath.replace(/\\/g, "/").trim();
+  const parts = normalized.split("/").filter(Boolean);
+  if (parts.length <= 1) {
+    return "";
+  }
+
+  return parts.slice(0, -1).join("/");
+}
+
+function getCommonPathPrefix(left: string, right: string) {
+  const leftParts = left.split("/").filter(Boolean);
+  const rightParts = right.split("/").filter(Boolean);
+  const shared: string[] = [];
+  const count = Math.min(leftParts.length, rightParts.length);
+
+  for (let index = 0; index < count; index += 1) {
+    if (leftParts[index] !== rightParts[index]) {
+      break;
+    }
+    shared.push(leftParts[index]);
+  }
+
+  return shared.join("/");
+}
+
+function mergeFileChanges(fileChanges: FileChangeData[]) {
+  const merged = new Map<string, FileChangeData>();
+
+  for (const fileChange of fileChanges) {
+    const key = fileChange.path.replace(/\\/g, "/");
+    const existing = merged.get(key);
+    if (!existing) {
+      merged.set(key, { ...fileChange });
+      continue;
+    }
+
+    existing.additions = (existing.additions || 0) + (fileChange.additions || 0);
+    existing.deletions = (existing.deletions || 0) + (fileChange.deletions || 0);
+    existing.diff = fileChange.diff || existing.diff;
+    existing.action = resolvePreferredAction(existing.action, fileChange.action);
+  }
+
+  return Array.from(merged.values());
+}
+
+function resolvePreferredAction(
+  left: FileChangeData["action"],
+  right: FileChangeData["action"],
+) {
+  const rank = {
+    created: 5,
+    deleted: 4,
+    moved: 3,
+    renamed: 2,
+    edited: 1,
+  } satisfies Record<FileChangeData["action"], number>;
+
+  return rank[right] > rank[left] ? right : left;
 }
 
 function mapCodexSessionsToProjects(sessions: CodexSessionSummary[]) {
@@ -535,32 +694,7 @@ export default function ChatScreen() {
     const onMessage = relayService.on("message", (payload) => {
       const message = payload as {
         method?: string;
-        params?: {
-          delta?: string;
-          textDelta?: string;
-          chunk?: string;
-          message?: string;
-          id?: string;
-          threadId?: string;
-          turnId?: string;
-          itemId?: string;
-          call_id?: string;
-          command?: string;
-          cmd?: string;
-          raw_command?: string;
-          rawCommand?: string;
-          cwd?: string;
-          working_directory?: string;
-          status?: string;
-          phase?: string;
-          exitCode?: number;
-          exit_code?: number;
-          output?: string;
-          durationMs?: number;
-          duration_ms?: number;
-          diff?: string;
-          msg?: any;
-        };
+        params?: RelayMessageParams;
       };
 
       console.log("[mobile][message]", message.method, message.params);
@@ -745,8 +879,19 @@ export default function ChatScreen() {
       }
 
       // Handle turn diff updates (file changes)
-      if (message.method === "turn/diff/updated" && message.params?.diff) {
+      if (message.method === "turn/diff/updated") {
+        const incomingFileChanges = Array.isArray(params?.fileChanges)
+          ? params.fileChanges
+          : [];
+        if (incomingFileChanges.length > 0) {
+          addFileChanges(incomingFileChanges);
+        }
+
         const diff = params?.diff || "";
+        if (!diff) {
+          return;
+        }
+
         const parsedFiles = parseUnifiedDiff(diff);
         const fileChanges = parsedFiles.map((file) => ({
           path: file.path,
@@ -974,6 +1119,18 @@ export default function ChatScreen() {
                   text=""
                   kind="command-execution"
                   commandExecutions={item.commands}
+                />
+              );
+            }
+
+            if (item.type === "file-change-group") {
+              return (
+                <MessageBubble
+                  key={item.id}
+                  role="system"
+                  text=""
+                  kind="file-change"
+                  fileChanges={item.fileChanges}
                 />
               );
             }
