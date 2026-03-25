@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from "react";
 import { Dimensions, Pressable, StyleSheet, View } from "react-native";
+import { Gesture, GestureDetector } from "react-native-gesture-handler";
 import Animated, {
   Easing,
   runOnJS,
@@ -23,6 +24,31 @@ export function SidePanel({ isVisible, onClose, children }: SidePanelProps) {
   const translateX = useSharedValue(SCREEN_WIDTH);
   const opacity = useSharedValue(0);
 
+  const panGesture = Gesture.Pan()
+    .enabled(isVisible)
+    .activeOffsetX([-20, 20])
+    .failOffsetY([-20, 20])
+    .onUpdate((event) => {
+      const nextX = Math.min(SCREEN_WIDTH, Math.max(0, event.translationX));
+      translateX.value = nextX;
+      opacity.value = Math.max(0, 1 - nextX / PANEL_WIDTH);
+    })
+    .onEnd((event) => {
+      const shouldClose =
+        event.velocityX > 500 || event.translationX > PANEL_WIDTH * 0.35;
+
+      if (shouldClose) {
+        runOnJS(onClose)();
+        return;
+      }
+
+      translateX.value = withTiming(0, {
+        duration: 250,
+        easing: Easing.bezier(0.25, 0.1, 0.25, 1),
+      });
+      opacity.value = withTiming(1, { duration: 250 });
+    });
+
   useEffect(() => {
     if (isVisible) {
       setIsMounted(true);
@@ -33,16 +59,10 @@ export function SidePanel({ isVisible, onClose, children }: SidePanelProps) {
       });
     } else {
       opacity.value = withTiming(0, { duration: 250 });
-      translateX.value = withTiming(
-        SCREEN_WIDTH,
-        {
-          duration: 250,
-          easing: Easing.bezier(0.25, 0.1, 0.25, 1),
-        },
-        () => {
-          runOnJS(onClose)();
-        },
-      );
+      translateX.value = withTiming(SCREEN_WIDTH, {
+        duration: 250,
+        easing: Easing.bezier(0.25, 0.1, 0.25, 1),
+      });
       const timeout = setTimeout(() => {
         setIsMounted(false);
       }, 260);
@@ -70,11 +90,13 @@ export function SidePanel({ isVisible, onClose, children }: SidePanelProps) {
       <Animated.View style={[styles.backdrop, backdropStyle]}>
         <Pressable style={styles.flex} onPress={onClose} />
       </Animated.View>
-      <Animated.View style={[styles.panel, panelStyle]}>
-        <SafeAreaView style={styles.flex} edges={["top", "bottom", "right"]}>
-          {children}
-        </SafeAreaView>
-      </Animated.View>
+      <GestureDetector gesture={panGesture}>
+        <Animated.View style={[styles.panel, panelStyle]}>
+          <SafeAreaView style={styles.flex} edges={["top", "bottom", "right"]}>
+            {children}
+          </SafeAreaView>
+        </Animated.View>
+      </GestureDetector>
     </View>
   );
 }

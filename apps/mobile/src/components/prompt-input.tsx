@@ -48,6 +48,7 @@ export function PromptInput({ onSend }: PromptInputProps) {
             <Pressable
               style={({ pressed }) => [
                 styles.actionButton,
+                { backgroundColor: theme.background },
                 pressed && styles.pressed,
               ]}
             >
@@ -66,6 +67,7 @@ export function PromptInput({ onSend }: PromptInputProps) {
             <Pressable
               style={({ pressed }) => [
                 styles.actionButton,
+                { backgroundColor: theme.background },
                 pressed && styles.pressed,
               ]}
             >
@@ -110,8 +112,10 @@ const styles = StyleSheet.create({
   innerContainer: {
     flexDirection: "column",
     borderWidth: 1,
-    borderRadius: 8,
-    padding: Spacing.one,
+    borderRadius: 28,
+    paddingTop: Spacing.one,
+    paddingBottom: Spacing.one,
+    paddingHorizontal: Spacing.one,
     minHeight: 100,
     maxHeight: 250,
     justifyContent: "flex-start",
@@ -120,7 +124,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: Spacing.two,
     paddingTop: Spacing.one,
     fontSize: 16,
-    minHeight: 50,
+    minHeight: 65,
   },
   bottomActions: {
     flexDirection: "row",
@@ -128,6 +132,7 @@ const styles = StyleSheet.create({
     alignItems: "center",
     marginTop: "auto",
     paddingTop: Spacing.one,
+    paddingHorizontal: Spacing.half,
   },
   leftActions: {
     flexDirection: "row",
@@ -141,15 +146,16 @@ const styles = StyleSheet.create({
     marginRight: Spacing.half,
   },
   actionButton: {
-    width: 32,
-    height: 32,
+    width: 34,
+    height: 34,
+    borderRadius: 17,
     justifyContent: "center",
     alignItems: "center",
   },
   sendButton: {
-    width: 32,
-    height: 32,
-    borderRadius: 6,
+    width: 36,
+    height: 36,
+    borderRadius: 18,
     justifyContent: "center",
     alignItems: "center",
   },

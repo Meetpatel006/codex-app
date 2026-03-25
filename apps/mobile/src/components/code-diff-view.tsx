@@ -20,6 +20,7 @@ import Animated, {
 } from "react-native-reanimated";
 
 import { ThemedText } from "@/components/themed-text";
+import { useTheme } from "@/hooks/use-theme";
 import { relayService } from "@/services/relay";
 import { useDiffStore } from "@/store/diff";
 import { useSessionStore } from "@/store/session";
@@ -40,6 +41,7 @@ type CodeDiffViewProps = {
 };
 
 export function CodeDiffView({ onClose }: CodeDiffViewProps) {
+  const theme = useTheme();
   const projects = useSessionStore((state) => state.projects);
   const activeProjectId = useSessionStore((state) => state.activeProjectId);
   const activeSessionId = useSessionStore((state) => state.activeSessionId);
@@ -147,12 +149,27 @@ export function CodeDiffView({ onClose }: CodeDiffViewProps) {
 
   return (
     <GestureDetector gesture={panGesture}>
-      <Animated.View style={[styles.container, animatedStyle]}>
+      <Animated.View
+        style={[
+          styles.container,
+          animatedStyle,
+          { backgroundColor: theme.background },
+        ]}
+      >
         <View style={styles.ideHeader}>
           <View style={styles.ideHeaderLeft}>
             <ThemedText style={styles.unstagedText}>Unstaged</ThemedText>
-            <View style={styles.badge}>
-              <ThemedText style={styles.badgeText}>{files.length}</ThemedText>
+            <View
+              style={[
+                styles.badge,
+                { backgroundColor: theme.backgroundElement },
+              ]}
+            >
+              <ThemedText
+                style={[styles.badgeText, { color: theme.textSecondary }]}
+              >
+                {files.length}
+              </ThemedText>
             </View>
             <SymbolView
               name={{
@@ -161,7 +178,7 @@ export function CodeDiffView({ onClose }: CodeDiffViewProps) {
                 web: "expand_more",
               }}
               size={10}
-              tintColor="#666"
+              tintColor={theme.textSecondary}
             />
           </View>
           <View style={styles.headerStats}>
@@ -193,21 +210,34 @@ export function CodeDiffView({ onClose }: CodeDiffViewProps) {
                     setRefreshing(false);
                   });
               }}
-              style={styles.refreshPill}
+              style={[
+                styles.refreshPill,
+                { backgroundColor: theme.backgroundElement },
+              ]}
             >
-              <ThemedText style={styles.refreshPillText}>
+              <ThemedText
+                style={[styles.refreshPillText, { color: theme.textSecondary }]}
+              >
                 {refreshing ? "Loading..." : "Refresh"}
               </ThemedText>
             </Pressable>
-            <ThemedText style={styles.pillAdded}>+{totals.added}</ThemedText>
-            <ThemedText style={styles.pillRemoved}>
+            <ThemedText
+              style={[styles.pillAdded, { color: theme.successColor }]}
+            >
+              +{totals.added}
+            </ThemedText>
+            <ThemedText
+              style={[styles.pillRemoved, { color: theme.errorColor }]}
+            >
               -{totals.removed}
             </ThemedText>
           </View>
         </View>
 
         {loadError ? (
-          <ThemedText style={styles.errorText}>{loadError}</ThemedText>
+          <ThemedText style={[styles.errorText, { color: theme.errorColor }]}>
+            {loadError}
+          </ThemedText>
         ) : null}
 
         <ScrollView
@@ -220,17 +250,28 @@ export function CodeDiffView({ onClose }: CodeDiffViewProps) {
                 onPress={() => toggleExpand(file.id)}
                 style={[
                   styles.pillHeader,
+                  { backgroundColor: theme.backgroundElement },
                   expandedFile === file.id && styles.pillHeaderExpanded,
+                  expandedFile === file.id && {
+                    backgroundColor: theme.backgroundSelected,
+                  },
                 ]}
               >
-                <ThemedText style={styles.filePath} numberOfLines={1}>
+                <ThemedText
+                  style={[styles.filePath, { color: theme.textSecondary }]}
+                  numberOfLines={1}
+                >
                   {file.path}
                 </ThemedText>
                 <View style={styles.pillStats}>
-                  <ThemedText style={styles.pillAdded}>
+                  <ThemedText
+                    style={[styles.pillAdded, { color: theme.successColor }]}
+                  >
                     +{file.additions}
                   </ThemedText>
-                  <ThemedText style={styles.pillRemoved}>
+                  <ThemedText
+                    style={[styles.pillRemoved, { color: theme.errorColor }]}
+                  >
                     -{file.deletions}
                   </ThemedText>
                   <SymbolView
@@ -249,23 +290,35 @@ export function CodeDiffView({ onClose }: CodeDiffViewProps) {
                           : "expand_more",
                     }}
                     size={10}
-                    tintColor="#666"
+                    tintColor={theme.textSecondary}
                     style={styles.chevron}
                   />
                 </View>
               </Pressable>
 
               {expandedFile === file.id && file.hunks.length > 0 ? (
-                <View style={styles.diffContent}>
+                <View
+                  style={[
+                    styles.diffContent,
+                    { backgroundColor: theme.backgroundElement },
+                  ]}
+                >
                   {file.hunks.slice(0, 3).map((hunk) =>
                     hunk.lines.slice(0, 120).map((line) => (
                       <View key={line.id} style={styles.line}>
                         <ThemedText
                           style={[
                             styles.lineNumber,
+                            { color: theme.textSecondary },
                             line.type === "addition" && styles.addedLineNumber,
                             line.type === "deletion" &&
                               styles.removedLineNumber,
+                            line.type === "addition" && {
+                              color: theme.diffAdditionText,
+                            },
+                            line.type === "deletion" && {
+                              color: theme.diffDeletionText,
+                            },
                           ]}
                         >
                           {line.newLineNumber || line.oldLineNumber || ""}
@@ -273,8 +326,15 @@ export function CodeDiffView({ onClose }: CodeDiffViewProps) {
                         <ThemedText
                           style={[
                             styles.codeText,
+                            { color: theme.text },
                             line.type === "addition" && styles.addedCodeText,
                             line.type === "deletion" && styles.removedCodeText,
+                            line.type === "addition" && {
+                              color: theme.diffAdditionText,
+                            },
+                            line.type === "deletion" && {
+                              color: theme.diffDeletionText,
+                            },
                           ]}
                         >
                           {line.content}
@@ -288,11 +348,21 @@ export function CodeDiffView({ onClose }: CodeDiffViewProps) {
           ))}
 
           {files.length === 0 ? (
-            <View style={styles.emptyState}>
+            <View
+              style={[
+                styles.emptyState,
+                {
+                  borderColor: theme.backgroundSelected,
+                  backgroundColor: theme.backgroundElement,
+                },
+              ]}
+            >
               <ThemedText style={styles.emptyTitle}>
                 No diff available
               </ThemedText>
-              <ThemedText style={styles.emptyText}>
+              <ThemedText
+                style={[styles.emptyText, { color: theme.textSecondary }]}
+              >
                 Make file changes and refresh git status to see code diff.
               </ThemedText>
             </View>
@@ -306,7 +376,6 @@ export function CodeDiffView({ onClose }: CodeDiffViewProps) {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: "#FFFFFF",
   },
   ideHeader: {
     flexDirection: "row",
@@ -327,29 +396,24 @@ const styles = StyleSheet.create({
   },
   refreshPill: {
     borderRadius: 14,
-    backgroundColor: "#ECECEC",
     paddingHorizontal: 10,
     paddingVertical: 4,
   },
   refreshPillText: {
     fontSize: 11,
-    color: "#444",
     fontWeight: "600",
   },
   unstagedText: {
     fontSize: 14,
     fontWeight: "600",
-    color: "#111",
   },
   badge: {
-    backgroundColor: "#F0F0F0",
     paddingHorizontal: 8,
     paddingVertical: 2,
     borderRadius: 10,
   },
   badgeText: {
     fontSize: 11,
-    color: "#666",
     fontWeight: "600",
   },
   scrollContent: {
@@ -357,7 +421,6 @@ const styles = StyleSheet.create({
     paddingBottom: 36,
   },
   errorText: {
-    color: "#A33A3A",
     fontSize: 12,
     paddingHorizontal: 16,
     marginBottom: 4,
@@ -371,7 +434,6 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     justifyContent: "space-between",
     alignItems: "center",
-    backgroundColor: "#ECECEC",
     paddingHorizontal: 12,
     height: 36,
     borderRadius: 8,
@@ -379,11 +441,9 @@ const styles = StyleSheet.create({
   pillHeaderExpanded: {
     borderBottomLeftRadius: 0,
     borderBottomRightRadius: 0,
-    backgroundColor: "#E5E5E5",
   },
   filePath: {
     fontSize: 12,
-    color: "#444",
     flex: 1,
     marginRight: 8,
   },
@@ -396,17 +456,14 @@ const styles = StyleSheet.create({
     marginLeft: 8,
   },
   pillAdded: {
-    color: "#4CAF50",
     fontSize: 12,
     fontWeight: "600",
   },
   pillRemoved: {
-    color: "#FF5252",
     fontSize: 12,
     fontWeight: "600",
   },
   diffContent: {
-    backgroundColor: "#EEF6F0",
     paddingVertical: 8,
   },
   line: {
@@ -418,47 +475,35 @@ const styles = StyleSheet.create({
   lineNumber: {
     width: 38,
     fontSize: 12,
-    color: "#666",
     textAlign: "right",
     marginRight: 14,
     fontFamily: Platform.OS === "ios" ? "Menlo" : "monospace",
   },
   addedLineNumber: {
-    color: "#2E7D32",
     fontWeight: "600",
   },
   removedLineNumber: {
-    color: "#B33A3A",
     fontWeight: "600",
   },
   codeText: {
     flex: 1,
     fontSize: 12,
-    color: "#222",
     fontFamily: Platform.OS === "ios" ? "Menlo" : "monospace",
   },
-  addedCodeText: {
-    color: "#1F5D2F",
-  },
-  removedCodeText: {
-    color: "#7A2B2B",
-  },
+  addedCodeText: {},
+  removedCodeText: {},
   emptyState: {
     borderRadius: 10,
     borderWidth: 1,
-    borderColor: "#E4E4E4",
-    backgroundColor: "#FAFAFA",
     padding: 14,
   },
   emptyTitle: {
     fontSize: 14,
     fontWeight: "700",
-    color: "#333",
     marginBottom: 6,
   },
   emptyText: {
     fontSize: 12,
-    color: "#777",
     lineHeight: 18,
   },
 });

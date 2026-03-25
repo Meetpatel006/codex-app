@@ -36,6 +36,7 @@ import {
 
 interface ProjectSidebarProps {
   isOpen: boolean;
+  gesturesEnabled?: boolean;
   onOpen?: () => void;
   onClose: () => void;
   onProjectSelect: (projectId: string) => void;
@@ -47,6 +48,7 @@ type ExpandedState = Record<string, boolean>;
 
 export const ProjectSidebar: React.FC<ProjectSidebarProps> = ({
   isOpen,
+  gesturesEnabled = true,
   onOpen,
   onClose,
   onProjectSelect,
@@ -98,28 +100,15 @@ export const ProjectSidebar: React.FC<ProjectSidebarProps> = ({
   };
 
   const panGesture = Gesture.Pan()
+    .enabled(gesturesEnabled)
     // Require intentional horizontal movement to respect vertical scrolling in children
     .activeOffsetX([-20, 20])
-    // Allow edge swipes or swiping from anywhere if drawer is already open
-    .onBegin((event) => {
-      // If drawer is closed, only allow swipe from left edge
-      if (!isDrawerOpen.value && event.x > 40) {
-        // We can't cancel a gesture explicitly in onBegin this way, but we will block processing in onUpdate
-      }
-    })
     .onUpdate((event) => {
-      // Enforce edge swipe when closed: if initial touch X was > 40, do not open
-      if (!isDrawerOpen.value && event.x - event.translationX > 40) {
-        return;
-      }
       const newX =
         event.translationX + (isDrawerOpen.value ? 0 : -sidebarWidth);
       translateX.value = Math.min(0, Math.max(-sidebarWidth, newX));
     })
     .onEnd((event) => {
-      if (!isDrawerOpen.value && event.x - event.translationX > 40) {
-        return;
-      }
       if (
         event.velocityX > 500 ||
         (event.translationX > sidebarWidth / 2 && !isDrawerOpen.value)
@@ -406,7 +395,7 @@ export const ProjectSidebar: React.FC<ProjectSidebarProps> = ({
       pointerEvents={children ? "auto" : "box-none"}
     >
       <GestureDetector gesture={panGesture}>
-        <View style={themedStyles.innerWrapper} pointerEvents="box-none">
+        <View style={themedStyles.innerWrapper}>
           {children && <View style={themedStyles.content}>{children}</View>}
           {overlayContent}
         </View>

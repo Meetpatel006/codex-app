@@ -14,6 +14,7 @@ import { useSessionStore } from "@/store/session";
 import { parseUnifiedDiff } from "@/utils/diff";
 import { ThemedText } from "@/components/themed-text";
 import { Input } from "@/components/ui/input";
+import { useTheme } from "@/hooks/use-theme";
 import { getGitCwd, type GitStatusResult } from "@/utils/git";
 
 type CommitNextStep = "commit" | "push";
@@ -36,9 +37,18 @@ type GitCommitViewProps = {
 type ToggleProps = {
   value: boolean;
   onValueChange: (value: boolean) => void;
+  trackOffColor: string;
+  trackOnColor: string;
+  thumbColor: string;
 };
 
-function CustomToggle({ value, onValueChange }: ToggleProps) {
+function CustomToggle({
+  value,
+  onValueChange,
+  trackOffColor,
+  trackOnColor,
+  thumbColor,
+}: ToggleProps) {
   const translateX = useSharedValue(value ? 16 : 0);
 
   useEffect(() => {
@@ -52,7 +62,7 @@ function CustomToggle({ value, onValueChange }: ToggleProps) {
     backgroundColor: interpolateColor(
       translateX.value,
       [0, 16],
-      ["#E9E9EB", "#000000"],
+      [trackOffColor, trackOnColor],
     ),
   }));
 
@@ -63,7 +73,13 @@ function CustomToggle({ value, onValueChange }: ToggleProps) {
   return (
     <Pressable onPress={() => onValueChange(!value)}>
       <Animated.View style={[styles.toggleTrack, animatedTrackStyle]}>
-        <Animated.View style={[styles.toggleThumb, animatedThumbStyle]} />
+        <Animated.View
+          style={[
+            styles.toggleThumb,
+            animatedThumbStyle,
+            { backgroundColor: thumbColor },
+          ]}
+        />
       </Animated.View>
     </Pressable>
   );
@@ -78,6 +94,7 @@ export function GitCommitView({
   statusText,
   onCommit,
 }: GitCommitViewProps) {
+  const theme = useTheme();
   const projects = useSessionStore((state) => state.projects);
   const activeProjectId = useSessionStore((state) => state.activeProjectId);
   const activeSessionId = useSessionStore((state) => state.activeSessionId);
@@ -190,7 +207,7 @@ export function GitCommitView({
   const statusLabel = statusText || liveStatusText;
 
   return (
-    <View style={styles.container}>
+    <View style={[styles.container, { backgroundColor: theme.background }]}>
       <View style={styles.header} />
 
       <ThemedText style={styles.title}>Commit your changes</ThemedText>
@@ -206,8 +223,12 @@ export function GitCommitView({
           <ThemedText style={styles.smallLabel}>
             {changedFilesValue} files
           </ThemedText>
-          <ThemedText style={styles.addedText}>+{additionsValue}</ThemedText>
-          <ThemedText style={styles.removedText}>-{deletionsValue}</ThemedText>
+          <ThemedText style={[styles.addedText, { color: theme.successColor }]}>
+            +{additionsValue}
+          </ThemedText>
+          <ThemedText style={[styles.removedText, { color: theme.errorColor }]}>
+            -{deletionsValue}
+          </ThemedText>
         </View>
       </View>
 
@@ -215,6 +236,9 @@ export function GitCommitView({
         <CustomToggle
           value={includeUnstaged}
           onValueChange={setIncludeUnstaged}
+          trackOffColor={theme.backgroundSelected}
+          trackOnColor={theme.text}
+          thumbColor={theme.background}
         />
         <ThemedText style={styles.toggleLabel}>Include unstaged</ThemedText>
       </View>
@@ -223,11 +247,16 @@ export function GitCommitView({
         <ThemedText style={styles.sectionLabel}>Commit message</ThemedText>
         <Input
           placeholder="Leave blank to autogenerate a commit message"
-          placeholderTextColor="#666"
           value={message}
           onChangeText={setMessage}
           multiline
-          style={styles.input}
+          style={[
+            styles.input,
+            {
+              backgroundColor: theme.backgroundElement,
+              borderColor: theme.backgroundSelected,
+            },
+          ]}
         />
       </View>
 
@@ -239,6 +268,9 @@ export function GitCommitView({
           style={[
             styles.stepItem,
             nextStep === "commit" && styles.stepItemActive,
+            nextStep === "commit" && {
+              backgroundColor: theme.backgroundElement,
+            },
           ]}
         >
           <ThemedText style={styles.stepText}>Commit</ThemedText>
@@ -249,6 +281,9 @@ export function GitCommitView({
           style={[
             styles.stepItem,
             nextStep === "push" && styles.stepItemActive,
+            nextStep === "push" && {
+              backgroundColor: theme.backgroundElement,
+            },
           ]}
         >
           <ThemedText style={styles.stepText}>Commit and push</ThemedText>
@@ -262,12 +297,20 @@ export function GitCommitView({
       </View>
 
       {statusLabel ? (
-        <ThemedText style={styles.statusText}>{statusLabel}</ThemedText>
+        <ThemedText style={[styles.statusText, { color: theme.textSecondary }]}>
+          {statusLabel}
+        </ThemedText>
       ) : null}
 
       <View style={styles.footer}>
         <View style={styles.draftToggle}>
-          <CustomToggle value={isDraft} onValueChange={setIsDraft} />
+          <CustomToggle
+            value={isDraft}
+            onValueChange={setIsDraft}
+            trackOffColor={theme.backgroundSelected}
+            trackOnColor={theme.text}
+            thumbColor={theme.background}
+          />
           <ThemedText style={styles.draftLabel}>Draft</ThemedText>
         </View>
         <Pressable
@@ -282,10 +325,15 @@ export function GitCommitView({
           disabled={!!isSubmitting}
           style={[
             styles.continueButton,
+            { backgroundColor: theme.text },
             isSubmitting && styles.continueDisabled,
           ]}
         >
-          <ThemedText style={styles.continueText}>{nextLabel}</ThemedText>
+          <ThemedText
+            style={[styles.continueText, { color: theme.background }]}
+          >
+            {nextLabel}
+          </ThemedText>
         </Pressable>
       </View>
     </View>
@@ -298,7 +346,6 @@ const styles = StyleSheet.create({
     borderTopLeftRadius: 32,
     borderTopRightRadius: 32,
     paddingBottom: 40,
-    backgroundColor: "#FFFFFF",
   },
   header: {
     marginBottom: 28,
@@ -307,7 +354,6 @@ const styles = StyleSheet.create({
     fontSize: 20,
     fontWeight: "700",
     marginBottom: 28,
-    color: "#000",
   },
   infoRow: {
     flexDirection: "row",
@@ -318,7 +364,6 @@ const styles = StyleSheet.create({
   label: {
     fontSize: 14,
     fontWeight: "600",
-    color: "#000",
   },
   rightInfo: {
     flexDirection: "row",
@@ -328,19 +373,15 @@ const styles = StyleSheet.create({
   value: {
     fontSize: 14,
     fontWeight: "600",
-    color: "#000",
   },
   smallLabel: {
     fontSize: 12,
-    color: "#666",
   },
   addedText: {
-    color: "#4CAF50",
     fontSize: 12,
     fontWeight: "600",
   },
   removedText: {
-    color: "#F44336",
     fontSize: 12,
     fontWeight: "600",
   },
@@ -372,7 +413,6 @@ const styles = StyleSheet.create({
   toggleLabel: {
     fontSize: 14,
     fontWeight: "500",
-    color: "#000",
   },
   section: {
     marginBottom: 28,
@@ -381,7 +421,6 @@ const styles = StyleSheet.create({
     fontSize: 13,
     fontWeight: "700",
     marginBottom: 12,
-    color: "#000",
   },
   input: {
     height: 64,
@@ -390,9 +429,7 @@ const styles = StyleSheet.create({
     fontSize: 14,
     textAlignVertical: "top",
     paddingTop: 12,
-    backgroundColor: "#F5F5F7",
-    color: "#000",
-    borderColor: "transparent",
+    borderWidth: 1,
   },
   stepItem: {
     height: 48,
@@ -402,7 +439,7 @@ const styles = StyleSheet.create({
     marginBottom: 2,
   },
   stepItemActive: {
-    backgroundColor: "#F5F5F7",
+    backgroundColor: "transparent",
   },
   stepItemDisabled: {
     opacity: 0.3,
@@ -410,13 +447,9 @@ const styles = StyleSheet.create({
   stepText: {
     fontSize: 14,
     fontWeight: "600",
-    color: "#000",
   },
-  stepTextDisabled: {
-    color: "#666",
-  },
+  stepTextDisabled: {},
   statusText: {
-    color: "#666",
     fontSize: 12,
     marginTop: -12,
     marginBottom: 16,
@@ -435,13 +468,11 @@ const styles = StyleSheet.create({
   draftLabel: {
     fontSize: 14,
     fontWeight: "600",
-    color: "#000",
   },
   continueButton: {
     paddingHorizontal: 36,
     paddingVertical: 12,
     borderRadius: 24,
-    backgroundColor: "#000",
   },
   continueDisabled: {
     opacity: 0.7,
@@ -449,6 +480,5 @@ const styles = StyleSheet.create({
   continueText: {
     fontSize: 14,
     fontWeight: "700",
-    color: "#FFF",
   },
 });

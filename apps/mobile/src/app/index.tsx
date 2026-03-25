@@ -1047,6 +1047,7 @@ export default function ChatScreen() {
   return (
     <ProjectSidebar
       isOpen={sidebarOpen}
+      gesturesEnabled={!pairSheetOpen && !isDiffPanelOpen}
       onOpen={() => setSidebarOpen(true)}
       onClose={() => setSidebarOpen(false)}
       onProjectSelect={(projectId) => {
