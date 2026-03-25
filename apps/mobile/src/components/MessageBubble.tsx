@@ -2,6 +2,7 @@ import React, { useMemo } from "react";
 import { StyleSheet, Text, View } from "react-native";
 import { CodeBlockView } from "./CodeBlockView";
 import { CommandExecutionCard } from "./CommandExecutionCard";
+import { CommandExecutionGroup } from "./CommandExecutionGroup";
 import { DiffBlockView } from "./DiffBlockView";
 import { FileChangeCard } from "./FileChangeCard";
 import { MarkdownText } from "./MarkdownText";
@@ -24,6 +25,7 @@ type Props = {
   kind?: "thinking" | "file-change" | "plan" | "command-execution" | "normal";
   deliveryState?: "sending" | "sent" | "failed";
   commandExecution?: CommandExecutionData;
+  commandExecutions?: CommandExecutionData[];
   fileChanges?: FileChangeData[];
 };
 
@@ -34,6 +36,7 @@ export function MessageBubble({
   kind = "normal",
   deliveryState = "sent",
   commandExecution,
+  commandExecutions,
   fileChanges,
 }: Props) {
   const colors = useTheme();
@@ -111,6 +114,18 @@ export function MessageBubble({
           ) : (
             <ThinkingText streaming={streaming} />
           )}
+        </View>
+      );
+    }
+
+    if (
+      kind === "command-execution" &&
+      commandExecutions &&
+      commandExecutions.length > 0
+    ) {
+      return (
+        <View style={themedStyles.systemWrapper}>
+          <CommandExecutionGroup commands={commandExecutions} />
         </View>
       );
     }

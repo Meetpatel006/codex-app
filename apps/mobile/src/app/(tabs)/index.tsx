@@ -1,5 +1,5 @@
 import { router } from "expo-router";
-import React, { useCallback, useEffect, useRef, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
 
 import { MessageBubble } from "@/components/MessageBubble";
@@ -15,6 +15,7 @@ import { SidePanel } from "@/components/ui/side-panel";
 import { buildRequest } from "@/services/jsonrpc";
 import { relayService } from "@/services/relay";
 import { useChatStore } from "@/store/chat";
+import type { ChatMessage, CommandExecutionData } from "@/store/chat";
 import { useDiffStore } from "@/store/diff";
 import { useUiStore } from "@/store/ui";
 import { parseUnifiedDiff } from "@/utils/diff";
@@ -41,6 +42,64 @@ type UpsertSystemMessageFn = (
   kind?: "thinking" | "file-change" | "plan" | "command-execution" | "normal",
   options?: { append?: boolean; streaming?: boolean },
 ) => void;
+
+type RenderItem =
+  | {
+      type: "message";
+      id: string;
+      message: ChatMessage;
+    }
+  | {
+      type: "command-group";
+      id: string;
+      commands: CommandExecutionData[];
+    };
+
+function buildRenderItems(messages: ChatMessage[]): RenderItem[] {
+  const items: RenderItem[] = [];
+
+  for (let index = 0; index < messages.length; index += 1) {
+    const message = messages[index];
+    if (
+      message.role === "system" &&
+      message.kind === "command-execution" &&
+      message.commandExecution
+    ) {
+      const commands: CommandExecutionData[] = [message.commandExecution];
+      let nextIndex = index + 1;
+
+      while (nextIndex < messages.length) {
+        const nextMessage = messages[nextIndex];
+        if (
+          nextMessage.role !== "system" ||
+          nextMessage.kind !== "command-execution" ||
+          !nextMessage.commandExecution
+        ) {
+          break;
+        }
+
+        commands.push(nextMessage.commandExecution);
+        nextIndex += 1;
+      }
+
+      items.push({
+        type: "command-group",
+        id: `command-group-${message.id}`,
+        commands,
+      });
+      index = nextIndex - 1;
+      continue;
+    }
+
+    items.push({
+      type: "message",
+      id: message.id,
+      message,
+    });
+  }
+
+  return items;
+}
 
 function mapCodexSessionsToProjects(sessions: CodexSessionSummary[]) {
   const byProject = new Map<
@@ -265,6 +324,7 @@ export default function ChatScreen() {
 
   const presence = useChatStore((state) => state.presence);
   const messages = useChatStore((state) => state.messages);
+  const renderItems = useMemo(() => buildRenderItems(messages), [messages]);
   const setPresence = useChatStore((state) => state.setPresence);
   const addUserMessage = useChatStore((state) => state.addUserMessage);
   const appendAssistantDelta = useChatStore(
@@ -905,18 +965,33 @@ export default function ChatScreen() {
           style={styles.messages}
           contentContainerStyle={styles.messageContent}
         >
-          {messages.map((message) => (
-            <MessageBubble
-              key={message.id}
-              role={message.role}
-              text={message.text}
-              streaming={message.isStreaming}
-              kind={message.kind}
-              deliveryState={message.deliveryState}
-              commandExecution={message.commandExecution}
-              fileChanges={message.fileChanges}
-            />
-          ))}
+          {renderItems.map((item) => {
+            if (item.type === "command-group") {
+              return (
+                <MessageBubble
+                  key={item.id}
+                  role="system"
+                  text=""
+                  kind="command-execution"
+                  commandExecutions={item.commands}
+                />
+              );
+            }
+
+            const { message } = item;
+            return (
+              <MessageBubble
+                key={message.id}
+                role={message.role}
+                text={message.text}
+                streaming={message.isStreaming}
+                kind={message.kind}
+                deliveryState={message.deliveryState}
+                commandExecution={message.commandExecution}
+                fileChanges={message.fileChanges}
+              />
+            );
+          })}
         </ScrollView>
 
         <PromptInput onSend={send} />
