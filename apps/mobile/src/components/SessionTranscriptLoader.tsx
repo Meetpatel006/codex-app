@@ -10,6 +10,10 @@ import {
 import { useDiffStore } from "@/store/diff";
 import { parseMarkdownSegments } from "@/utils/markdown-parser";
 import { parseUnifiedDiff } from "@/utils/diff";
+import {
+  setThreadModelSelection,
+  setThreadThinkingSelection,
+} from "@/store/runtime-options";
 
 type SessionTranscriptResult = {
   chat?: {
@@ -22,6 +26,8 @@ type SessionTranscriptResult = {
     fileChanges?: FileChangeData[];
   }[];
   rolloutPath?: string;
+  model?: string;
+  effort?: string;
 };
 
 type SessionTranscriptLoaderProps = {
@@ -29,7 +35,10 @@ type SessionTranscriptLoaderProps = {
   loadTick: number;
 };
 
-export function SessionTranscriptLoader({ sessionRef, loadTick }: SessionTranscriptLoaderProps) {
+export function SessionTranscriptLoader({
+  sessionRef,
+  loadTick,
+}: SessionTranscriptLoaderProps) {
   const replaceMessages = useChatStore((state) => state.replaceMessages);
   const setDiffSnapshot = useDiffStore((state) => state.setDiffSnapshot);
 
@@ -43,23 +52,39 @@ export function SessionTranscriptLoader({ sessionRef, loadTick }: SessionTranscr
       }
 
       if (!relayService.isSecureReady()) {
-        console.log("[mobile][codex/sessions/read] secure channel not ready; skipping transcript load");
+        console.log(
+          "[mobile][codex/sessions/read] secure channel not ready; skipping transcript load",
+        );
         return;
       }
 
       try {
-        const result = await relayService.requestJson<SessionTranscriptResult>("codex/sessions/read", {
-          sessionRef: normalizedRef,
-          limit: 400,
-        });
+        const result = await relayService.requestJson<SessionTranscriptResult>(
+          "codex/sessions/read",
+          {
+            sessionRef: normalizedRef,
+            limit: 400,
+          },
+        );
 
         if (isCancelled) {
           return;
         }
 
         const transcript = Array.isArray(result?.chat) ? result.chat : [];
+        const sessionModel =
+          typeof result?.model === "string" ? result.model.trim() : "";
+        const sessionEffort =
+          typeof result?.effort === "string" ? result.effort.trim() : "";
         const nextMessages: ChatMessage[] = [];
         const collectedDiffs: string[] = [];
+
+        if (sessionModel) {
+          await setThreadModelSelection(normalizedRef, sessionModel);
+        }
+        if (sessionEffort) {
+          await setThreadThinkingSelection(normalizedRef, sessionEffort);
+        }
 
         transcript.forEach((item, index) => {
           const role =
@@ -78,7 +103,10 @@ export function SessionTranscriptLoader({ sessionRef, loadTick }: SessionTranscr
                 : item?.kind === "command-execution"
                   ? item?.commandExecution?.command || "Running command..."
                   : "";
-          if (!role || (!text && !item?.fileChanges && !item?.commandExecution)) {
+          if (
+            !role ||
+            (!text && !item?.fileChanges && !item?.commandExecution)
+          ) {
             return;
           }
 
@@ -102,7 +130,11 @@ export function SessionTranscriptLoader({ sessionRef, loadTick }: SessionTranscr
 
           if (role === "assistant") {
             parseMarkdownSegments(text).forEach((segment) => {
-              if (segment.type === "codeBlock" && segment.isDiff && segment.content) {
+              if (
+                segment.type === "codeBlock" &&
+                segment.isDiff &&
+                segment.content
+              ) {
                 collectedDiffs.push(segment.content);
               }
             });
@@ -118,7 +150,7 @@ export function SessionTranscriptLoader({ sessionRef, loadTick }: SessionTranscr
           });
         }
         console.log(
-          `[mobile][codex/sessions/read] loaded ${nextMessages.length} messages for sessionRef=${normalizedRef}`,
+          `[mobile][codex/sessions/read] loaded ${nextMessages.length} messages for sessionRef=${normalizedRef} model=${sessionModel || "none"} effort=${sessionEffort || "none"}`,
         );
       } catch (error) {
         if (isCancelled) {

@@ -33,12 +33,33 @@ export function buildRequest<TParams = unknown>(
   };
 }
 
-export function parseJsonRpc(raw: string): JsonRpcRequest | JsonRpcResponse | null {
+export function parseJsonRpc(
+  raw: string,
+): JsonRpcRequest | JsonRpcResponse | null {
   try {
-    const parsed = JSON.parse(raw) as JsonRpcRequest | JsonRpcResponse;
-    if (parsed && parsed.jsonrpc === "2.0") {
-      return parsed;
+    const parsed = JSON.parse(raw) as
+      | JsonRpcRequest
+      | JsonRpcResponse
+      | Record<string, unknown>;
+    if (!parsed || typeof parsed !== "object") {
+      return null;
     }
+
+    if ((parsed as JsonRpcRequest | JsonRpcResponse).jsonrpc === "2.0") {
+      return parsed as JsonRpcRequest | JsonRpcResponse;
+    }
+
+    const hasMethod =
+      typeof (parsed as { method?: unknown }).method === "string";
+    const hasResponseEnvelope =
+      ("result" in parsed || "error" in parsed) &&
+      (typeof (parsed as { id?: unknown }).id === "string" ||
+        typeof (parsed as { id?: unknown }).id === "number");
+
+    if (hasMethod || hasResponseEnvelope) {
+      return parsed as JsonRpcRequest | JsonRpcResponse;
+    }
+
     return null;
   } catch {
     return null;

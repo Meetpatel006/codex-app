@@ -36,7 +36,27 @@ import { useUiStore } from "@/store/ui";
 import { parseUnifiedDiff } from "@/utils/diff";
 import { getGitCwd, requestGitStatus } from "@/utils/git";
 import { useSessionStore } from "@/store/session";
+import {
+  useRuntimeOptionsStore,
+  type RuntimeOptions,
+  type ModelOption,
+} from "@/store/runtime-options";
 import { useTheme } from "@/hooks/use-theme";
+
+type CollaborationModePayload = {
+  mode: "auto" | "on-request";
+};
+
+type TurnStartRequestParams = {
+  threadId?: string;
+  input: {
+    type: "text";
+    text: string;
+  }[];
+  model?: string;
+  effort?: string;
+  collaborationMode?: CollaborationModePayload;
+};
 
 type CodexSessionSummary = {
   sessionId?: string;
@@ -299,8 +319,7 @@ function mapCodexSessionsToProjects(sessions: CodexSessionSummary[]) {
       continue;
     }
 
-    // Keep individual rollout entries visible in mobile like relay-test does.
-    const sessionKey = (session.rolloutPath || "").trim() || rawSessionId;
+    const sessionKey = rawSessionId;
 
     const lastActiveAt = Number.isFinite(session.updatedAtMs)
       ? Number(session.updatedAtMs)
@@ -469,6 +488,7 @@ export default function ChatScreen() {
   // Track command IDs by itemId across renders
   const commandIdMapRef = useRef(new Map<string, string>());
   const thinkingIdMapRef = useRef(new Map<string, string>());
+  const codexInitializedRef = useRef(false);
 
   const pairing = useSessionStore((state) => state.pairing);
   const loadSession = useSessionStore((state) => state.load);
@@ -497,6 +517,112 @@ export default function ChatScreen() {
   const isDiffPanelOpen = useUiStore((state) => state.isDiffPanelOpen);
   const openDiffPanel = useUiStore((state) => state.openDiffPanel);
   const closeDiffPanel = useUiStore((state) => state.closeDiffPanel);
+
+  const setRuntimeOptions = useRuntimeOptionsStore((state) => state.setOptions);
+  const setRuntimeOptionsLoading = useRuntimeOptionsStore((state) => state.setLoading,);
+  const setModelOptions = useRuntimeOptionsStore((state) => state.setModelOptions,);
+  const setRuntimeOptionsError = useRuntimeOptionsStore((state) => state.setError,);
+  const selectedModel = useRuntimeOptionsStore((state) => state.selectedModel);
+  const selectedThinking = useRuntimeOptionsStore((state) => state.selectedThinking,);
+  const threadSelections = useRuntimeOptionsStore((state) => state.threadSelections,);
+  const loadRuntimeSelections = useRuntimeOptionsStore((state) => state.loadSelections,);
+  const runtimePermission = useRuntimeOptionsStore((state) => state.options.permission,);
+  const runtimeModel = useRuntimeOptionsStore((state) => state.options.model);
+  const runtimeThinking = useRuntimeOptionsStore((state) => state.options.thinking,);
+
+  const fetchCodexModelOptions = useCallback(async () => {
+    if (!relayService.isSecureReady()) {
+      return;
+    }
+
+    try {
+      const result = await relayService.requestJson<{
+        data?: ModelOption[];
+      }>("model/list", {}, 20_000);
+      const data = Array.isArray(result?.data) ? result.data : [];
+      setModelOptions(data);
+      console.log("[mobile][model/list] received options", {
+        count: data.length,
+      });
+    } catch (error) {
+      console.warn("[mobile][model/list] fetch failed", error);
+    }
+  }, [setModelOptions]);
+
+  const fetchCodexModelOptionsFallback = useCallback(async () => {
+    if (!relayService.isSecureReady()) {
+      return;
+    }
+
+    try {
+      const result = await relayService.requestJson<{
+        config?: {
+          model?: string;
+          model_reasoning_effort?: string;
+        };
+      }>("config/read", {}, 15_000);
+      const model = String(result?.config?.model || "").trim();
+      const effort = String(
+        result?.config?.model_reasoning_effort || "",
+      ).trim();
+      if (!model) {
+        return;
+      }
+
+      const fallbackModel: ModelOption = {
+        id: model,
+        model,
+        displayName: model,
+        hidden: false,
+        supportedReasoningEfforts: effort
+          ? [{ reasoningEffort: effort, description: "Configured default" }]
+          : [],
+        defaultReasoningEffort: effort || undefined,
+      };
+      setModelOptions([fallbackModel]);
+      console.log("[mobile][config/read] using fallback model option", {
+        model,
+        effort: effort || null,
+      });
+    } catch (error) {
+      console.warn("[mobile][config/read] fallback fetch failed", error);
+    }
+  }, [setModelOptions]);
+
+  const ensureCodexInitialized = useCallback(async () => {
+    if (!relayService.isSecureReady()) {
+      return false;
+    }
+
+    if (codexInitializedRef.current) {
+      return true;
+    }
+
+    try {
+      await relayService.requestJson<{ bridgeManaged?: boolean }>(
+        "initialize",
+        {
+          protocolVersion: "2024-11-05",
+          capabilities: {
+            experimentalApi: true,
+          },
+          clientInfo: {
+            name: "remodex-mobile",
+            version: "1.0.0",
+          },
+        },
+        20_000,
+      );
+      console.log("[mobile][initialize] initialize response received");
+      await relayService.sendJson(buildRequest("initialized", {}));
+      codexInitializedRef.current = true;
+      console.log("[mobile][initialize] codex protocol initialized");
+      return true;
+    } catch (error) {
+      console.warn("[mobile][initialize] failed", error);
+      return false;
+    }
+  }, []);
 
   const presence = useChatStore((state) => state.presence);
   const messages = useChatStore((state) => state.messages);
@@ -538,6 +664,15 @@ export default function ChatScreen() {
   useEffect(() => {
     void loadSession();
   }, [loadSession]);
+
+  useEffect(() => {
+    void loadRuntimeSelections().catch((error) => {
+      console.warn(
+        "[mobile][runtime-options] failed to load selections",
+        error,
+      );
+    });
+  }, [loadRuntimeSelections]);
 
   useEffect(() => {
     setActiveDiffSession(activeSessionId);
@@ -692,6 +827,37 @@ export default function ChatScreen() {
     );
   }, [activeProjectId, activeSessionId, replaceProjects]);
 
+  const fetchRuntimeOptions = useCallback(async () => {
+    if (!relayService.isSecureReady()) {
+      console.log(
+        "[mobile][bridge/runtimeOptions/get] secure not ready; skipping fetch",
+      );
+      return;
+    }
+
+    try {
+      setRuntimeOptionsLoading(true);
+      console.log(
+        "[mobile][bridge/runtimeOptions/get] requesting from bridge...",
+      );
+
+      const result = await relayService.requestJson<RuntimeOptions>(
+        "bridge/runtimeOptions/get",
+        {},
+      );
+
+      console.log("[mobile][bridge/runtimeOptions/get] received:", result);
+      setRuntimeOptions(result);
+    } catch (error) {
+      console.warn("[mobile][bridge/runtimeOptions/get] fetch failed", error);
+      setRuntimeOptionsError(
+        error instanceof Error
+          ? error.message
+          : "Failed to fetch runtime options",
+      );
+    }
+  }, [setRuntimeOptions, setRuntimeOptionsLoading, setRuntimeOptionsError]);
+
   useEffect(() => {
     const onPresence = relayService.on("presence", (nextPresence) => {
       setPresence(nextPresence);
@@ -703,9 +869,32 @@ export default function ChatScreen() {
 
     const onReady = relayService.on("ready", () => {
       setPresence("online");
-      void refreshCodexSessions().catch((error) => {
-        console.warn("[mobile][codex/sessions/list] refresh failed", error);
-      });
+      void (async () => {
+        void refreshCodexSessions().catch((error) => {
+          console.warn("[mobile][codex/sessions/list] refresh failed", error);
+        });
+        void fetchRuntimeOptions().catch((error) => {
+          console.warn(
+            "[mobile][bridge/runtimeOptions/get] fetch failed",
+            error,
+          );
+        });
+
+        const initialized = await ensureCodexInitialized();
+        if (!initialized) {
+          return;
+        }
+
+        void fetchCodexModelOptions().catch((error) => {
+          console.warn("[mobile][model/list] fetch failed", error);
+        });
+        void fetchCodexModelOptionsFallback().catch((fallbackError) => {
+          console.warn(
+            "[mobile][config/read] fallback fetch failed",
+            fallbackError,
+          );
+        });
+      })();
     });
 
     const onMessage = relayService.on("message", (payload) => {
@@ -960,6 +1149,10 @@ export default function ChatScreen() {
     addFileChanges,
     activeSessionId,
     refreshCodexSessions,
+    fetchRuntimeOptions,
+    ensureCodexInitialized,
+    fetchCodexModelOptions,
+    fetchCodexModelOptionsFallback,
     setDiffSnapshot,
     setPresence,
   ]);
@@ -1032,11 +1225,52 @@ export default function ChatScreen() {
     setAssistantMessageId(null);
 
     try {
-      await relayService.sendJson(
-        buildRequest("message/send", {
-          content: text,
-        }),
-      );
+      const collaborationMode: CollaborationModePayload | undefined =
+        runtimePermission === "full"
+          ? { mode: "auto" }
+          : runtimePermission === "on-request"
+            ? { mode: "on-request" }
+            : undefined;
+
+      const requestParams: TurnStartRequestParams = {
+        threadId: activeSessionId || undefined,
+        input: [
+          {
+            type: "text",
+            text,
+          },
+        ],
+        model:
+          (activeSessionId ? threadSelections[activeSessionId]?.model : null) ||
+          selectedModel ||
+          runtimeModel ||
+          undefined,
+        effort:
+          (activeSessionId
+            ? threadSelections[activeSessionId]?.thinking
+            : null) ||
+          selectedThinking ||
+          runtimeThinking ||
+          undefined,
+        collaborationMode,
+      };
+
+      await relayService.sendJson(buildRequest("turn/start", requestParams));
+      console.log("[mobile][send] payload runtime", {
+        model:
+          (activeSessionId ? threadSelections[activeSessionId]?.model : null) ||
+          selectedModel ||
+          runtimeModel ||
+          null,
+        effort:
+          (activeSessionId
+            ? threadSelections[activeSessionId]?.thinking
+            : null) ||
+          selectedThinking ||
+          runtimeThinking ||
+          null,
+        collaborationMode: collaborationMode || null,
+      });
       updateMessageDeliveryState(messageId, "sent");
     } catch (error) {
       console.error("[mobile][send] Failed to send message", error);
