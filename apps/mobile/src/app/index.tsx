@@ -14,6 +14,7 @@ import { ProjectSidebar } from "@/components/ProjectSidebar";
 import { PromptInput } from "@/components/prompt-input";
 import { ChatHeader } from "@/components/chat-header";
 import { CodeDiffView } from "@/components/code-diff-view";
+import { EmptyChatState } from "@/components/EmptyChatState";
 import { GitCommitView } from "@/components/git-commit-view";
 import { PairDeviceView } from "@/components/pair-device-view";
 import { BottomSheet } from "@/components/ui/bottom-sheet";
@@ -570,6 +571,7 @@ export default function ChatScreen() {
   const projects = useSessionStore((state) => state.projects);
   const activeProjectId = useSessionStore((state) => state.activeProjectId);
   const activeSessionId = useSessionStore((state) => state.activeSessionId);
+  const setActiveProject = useSessionStore((state) => state.setActiveProject);
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [commitSheetOpen, setCommitSheetOpen] = useState(false);
   const [pairSheetOpen, setPairSheetOpen] = useState(false);
@@ -1549,47 +1551,66 @@ export default function ChatScreen() {
 
           <ScrollView
             style={styles.messages}
-            contentContainerStyle={styles.messageContent}
+            contentContainerStyle={[
+              styles.messageContent,
+              renderItems.length === 0 && { flexGrow: 1, justifyContent: 'center' }
+            ]}
           >
-            {renderItems.map((item) => {
-              if (item.type === "command-group") {
+            {renderItems.length === 0 ? (
+              <EmptyChatState 
+                projectName={activeProject?.name} 
+                projects={projects}
+                onProjectSelect={(projectId) => {
+                  setActiveProject(projectId);
+                  // Optionally find the most recent session for this project
+                  const proj = projects.find(p => p.id === projectId);
+                  if (proj?.sessions.length) {
+                    resumeThread(proj.sessions[0].id);
+                    setSessionLoadTick((v) => v + 1);
+                  }
+                }}
+              />
+            ) : (
+              renderItems.map((item) => {
+                if (item.type === "command-group") {
+                  return (
+                    <MessageBubble
+                      key={item.id}
+                      role="system"
+                      text=""
+                      kind="command-execution"
+                      commandExecutions={item.commands}
+                    />
+                  );
+                }
+
+                if (item.type === "file-change-group") {
+                  return (
+                    <MessageBubble
+                      key={item.id}
+                      role="system"
+                      text=""
+                      kind="file-change"
+                      fileChanges={item.fileChanges}
+                    />
+                  );
+                }
+
+                const { message } = item;
                 return (
                   <MessageBubble
-                    key={item.id}
-                    role="system"
-                    text=""
-                    kind="command-execution"
-                    commandExecutions={item.commands}
+                    key={message.id}
+                    role={message.role}
+                    text={message.text}
+                    streaming={message.isStreaming}
+                    kind={message.kind}
+                    deliveryState={message.deliveryState}
+                    commandExecution={message.commandExecution}
+                    fileChanges={message.fileChanges}
                   />
                 );
-              }
-
-              if (item.type === "file-change-group") {
-                return (
-                  <MessageBubble
-                    key={item.id}
-                    role="system"
-                    text=""
-                    kind="file-change"
-                    fileChanges={item.fileChanges}
-                  />
-                );
-              }
-
-              const { message } = item;
-              return (
-                <MessageBubble
-                  key={message.id}
-                  role={message.role}
-                  text={message.text}
-                  streaming={message.isStreaming}
-                  kind={message.kind}
-                  deliveryState={message.deliveryState}
-                  commandExecution={message.commandExecution}
-                  fileChanges={message.fileChanges}
-                />
-              );
-            })}
+              })
+            )}
           </ScrollView>
 
           <PromptInput onSend={send} />
