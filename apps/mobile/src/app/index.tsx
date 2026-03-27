@@ -24,7 +24,9 @@ import { PairDeviceView } from "@/components/pair-device-view";
 import { BottomSheet } from "@/components/ui/bottom-sheet";
 import { SidePanel } from "@/components/ui/side-panel";
 import { buildRequest } from "@/services/jsonrpc";
+import { bytesToBase64, hexToBytes } from "@/services/crypto";
 import { relayService } from "@/services/relay";
+import { resolveTrustedSession } from "@/services/trusted-resolve";
 import { useChatStore } from "@/store/chat";
 import type {
   ChatMessage,
@@ -98,6 +100,7 @@ type RenderItem =
 type RelayMessageParams = {
   delta?: string;
   textDelta?: string;
+  text_delta?: string;
   text?: string;
   chunk?: string;
   message?: string;
@@ -114,7 +117,9 @@ type RelayMessageParams = {
   rawCommand?: string;
   cwd?: string;
   working_directory?: string;
-  status?: string;
+  status?:
+    | string
+    | { type?: string; statusType?: string; status_type?: string };
   phase?: string;
   exitCode?: number;
   exit_code?: number;
@@ -123,8 +128,56 @@ type RelayMessageParams = {
   duration_ms?: number;
   diff?: string;
   fileChanges?: FileChangeData[];
+  item?: {
+    id?: string;
+    itemId?: string;
+    item_id?: string;
+    type?: string;
+    role?: string;
+    text?: string;
+    message?: string;
+    summary?: string;
+  };
   msg?: Record<string, unknown> & RelayMessageParams;
 };
+
+function normalizeEventToken(value: unknown) {
+  return typeof value === "string"
+    ? value.toLowerCase().replace(/[_-\s]+/g, "")
+    : "";
+}
+
+function incomingItemObject(params?: RelayMessageParams) {
+  const eventPayload = params?.msg;
+  if (params?.item && typeof params.item === "object") {
+    return params.item;
+  }
+  if (eventPayload?.item && typeof eventPayload.item === "object") {
+    return eventPayload.item as RelayMessageParams["item"];
+  }
+  if (
+    eventPayload &&
+    typeof eventPayload === "object" &&
+    typeof eventPayload.type === "string"
+  ) {
+    return eventPayload as RelayMessageParams["item"];
+  }
+  return undefined;
+}
+
+function isAssistantMessageItem(item: RelayMessageParams["item"]) {
+  if (!item || typeof item !== "object") {
+    return false;
+  }
+
+  const normalizedType = normalizeEventToken(item.type);
+  const normalizedRole = normalizeEventToken(item.role);
+  return (
+    normalizedType === "agentmessage" ||
+    normalizedType === "assistantmessage" ||
+    normalizedRole === "assistant"
+  );
+}
 
 function buildRenderItems(messages: ChatMessage[]): RenderItem[] {
   const items: RenderItem[] = [];
@@ -314,7 +367,9 @@ function mapCodexSessionsToProjects(sessions: CodexSessionSummary[]) {
   >();
 
   for (const session of sessions) {
-    const rawSessionId = (session.sessionId || session.threadId || "").trim();
+    const rawSessionId = normalizeThreadReference(
+      (session.sessionId || session.threadId || "").trim(),
+    );
     if (!rawSessionId) {
       continue;
     }
@@ -461,6 +516,22 @@ function normalizePathKey(input: string) {
   return input.replace(/\\/g, "/").replace(/\/+$/g, "").toLowerCase();
 }
 
+function normalizeThreadReference(value: string | null | undefined) {
+  const normalized = String(value || "").trim();
+  if (!normalized) {
+    return "";
+  }
+
+  const uuidSuffix = normalized.match(
+    /([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})$/i,
+  );
+  if (uuidSuffix) {
+    return uuidSuffix[1].toLowerCase();
+  }
+
+  return normalized;
+}
+
 function humanizeProjectName(cwd: string) {
   const normalized = cwd.replace(/\\/g, "/").replace(/\/+$/g, "");
   const parts = normalized.split("/").filter(Boolean);
@@ -499,6 +570,7 @@ export default function ChatScreen() {
     (state) => state.mobileIdentityPublicKeyHex,
   );
   const setIdentity = useSessionStore((state) => state.setMobileIdentity);
+  const setPairing = useSessionStore((state) => state.setPairing);
   const replaceProjects = useSessionStore((state) => state.replaceProjects);
   const projects = useSessionStore((state) => state.projects);
   const activeProjectId = useSessionStore((state) => state.activeProjectId);
@@ -814,7 +886,9 @@ export default function ChatScreen() {
       const hasActiveSession =
         !!nextActiveSessionId &&
         !!activeProject?.sessions.some(
-          (session) => session.id === nextActiveSessionId,
+          (session) =>
+            normalizeThreadReference(session.id) ===
+            normalizeThreadReference(nextActiveSessionId),
         );
       if (!hasActiveSession) {
         nextActiveSessionId = activeProject?.sessions[0]?.id || null;
@@ -826,6 +900,34 @@ export default function ChatScreen() {
       `[mobile][codex/sessions/list] store updated activeProject=${nextActiveProjectId || "none"} activeSession=${nextActiveSessionId || "none"}`,
     );
   }, [activeProjectId, activeSessionId, replaceProjects]);
+
+  const resumeThread = useCallback(
+    async (threadId: string | null | undefined) => {
+      const normalizedThreadId = normalizeThreadReference(threadId);
+      if (!normalizedThreadId || !relayService.isSecureReady()) {
+        return;
+      }
+
+      try {
+        await relayService.requestJson(
+          "thread/resume",
+          {
+            threadId: normalizedThreadId,
+          },
+          20_000,
+        );
+        console.log("[mobile][thread/resume] sent", {
+          threadId: normalizedThreadId,
+        });
+      } catch (error) {
+        console.warn("[mobile][thread/resume] failed", {
+          threadId: normalizedThreadId,
+          error,
+        });
+      }
+    },
+    [],
+  );
 
   const fetchRuntimeOptions = useCallback(async () => {
     if (!relayService.isSecureReady()) {
@@ -861,6 +963,9 @@ export default function ChatScreen() {
   useEffect(() => {
     const onPresence = relayService.on("presence", (nextPresence) => {
       setPresence(nextPresence);
+      if (nextPresence !== "online") {
+        codexInitializedRef.current = false;
+      }
     });
 
     const onError = relayService.on("error", (error) => {
@@ -868,6 +973,7 @@ export default function ChatScreen() {
     });
 
     const onReady = relayService.on("ready", () => {
+      codexInitializedRef.current = false;
       setPresence("online");
       void (async () => {
         void refreshCodexSessions().catch((error) => {
@@ -917,6 +1023,19 @@ export default function ChatScreen() {
             "",
         );
 
+      const getExistingAssistantText = (id: string | null | undefined) => {
+        const normalizedId = String(id || "").trim();
+        if (!normalizedId) {
+          return "";
+        }
+        const existing = useChatStore
+          .getState()
+          .messages.find(
+            (item) => item.id === normalizedId && item.role === "assistant",
+          );
+        return existing?.text || "";
+      };
+
       const ensureCommandMessage = (
         itemId: string,
         seed?: {
@@ -949,11 +1068,70 @@ export default function ChatScreen() {
         appendAssistantDelta(id, params?.delta || "");
       }
 
+      if (
+        message.method === "item/agentMessage/delta"
+      ) {
+        const itemObject = incomingItemObject(params);
+        const id =
+          resolveItemId() ||
+          String(
+            itemObject?.id || itemObject?.itemId || itemObject?.item_id || "",
+          ).trim() ||
+          assistantMessageId ||
+          `assistant-${Date.now()}`;
+        const delta =
+          params?.delta ||
+          params?.textDelta ||
+          params?.text_delta ||
+          eventPayload?.delta ||
+          eventPayload?.text ||
+          "";
+
+        if (delta) {
+          setAssistantMessageId(id);
+          appendAssistantDelta(id, delta);
+        }
+      }
+
       // Handle message completion
       if (message.method === "message/complete") {
         const id = params?.id || assistantMessageId;
         if (id) {
           completeAssistantMessage(id);
+        }
+      }
+
+      if (
+        message.method === "item/completed" ||
+        message.method === "codex/event/item_completed"
+      ) {
+        const itemObject = incomingItemObject(params);
+        if (isAssistantMessageItem(itemObject)) {
+          const id =
+            resolveItemId() ||
+            String(
+              itemObject?.id || itemObject?.itemId || itemObject?.item_id || "",
+            ).trim() ||
+            assistantMessageId;
+          const text = String(
+            itemObject?.message ||
+              itemObject?.text ||
+              itemObject?.summary ||
+              params?.message ||
+              eventPayload?.message ||
+              eventPayload?.text ||
+              "",
+          ).trim();
+
+          if (id && text) {
+            if (!getExistingAssistantText(id)) {
+              appendAssistantDelta(id, text);
+            }
+            setAssistantMessageId(id);
+          }
+          if (id) {
+            completeAssistantMessage(id);
+          }
         }
       }
 
@@ -974,18 +1152,6 @@ export default function ChatScreen() {
         const itemId = resolveItemId() || `background-${Date.now()}`;
         const text = params?.message || "Running background task";
         upsertSystemMessage(itemId, text, "normal");
-      }
-
-      if (message.method === "codex/event/agent_message") {
-        const text = eventPayload?.message || eventPayload?.text || "";
-        if (text) {
-          const id =
-            String(eventPayload?.itemId || eventPayload?.id || "").trim() ||
-            `assistant-${Date.now()}`;
-          appendAssistantDelta(id, text);
-          completeAssistantMessage(id);
-          setAssistantMessageId(id);
-        }
       }
 
       // Handle command execution - new protocol
@@ -1185,11 +1351,6 @@ export default function ChatScreen() {
         return;
       }
 
-      if (pairing.expiryMs < Date.now()) {
-        setPairSheetOpen(true);
-        return;
-      }
-
       let identityPrivate = privateKey;
       let identityPublic = publicKey;
       if (!identityPrivate || !identityPublic) {
@@ -1199,16 +1360,86 @@ export default function ChatScreen() {
         await setIdentity(identityPrivate, identityPublic);
       }
 
-      await relayService.connect({
-        relayUrl: pairing.relayUrl,
-        sessionId: pairing.sessionId,
-        identityPrivateKeyHex: identityPrivate,
-        bridgeIdentityPublicKey: pairing.bridgeIdentityPublicKey,
-      });
+      const canUseTrustedResolve = Boolean(pairing.macDeviceId);
+      const resolveSessionId = async () => {
+        if (!canUseTrustedResolve || !identityPrivate || !identityPublic) {
+          return null;
+        }
+
+        const phoneDeviceId = `phone-${identityPublic.toLowerCase().slice(0, 16)}`;
+        const phoneIdentityPublicKey = bytesToBase64(
+          hexToBytes(identityPublic),
+        );
+
+        try {
+          const result = await resolveTrustedSession({
+            relayBaseUrl: pairing.relayUrl,
+            macDeviceId: pairing.macDeviceId || "",
+            phoneDeviceId,
+            phoneIdentityPublicKey,
+            phoneIdentityPrivateKeyHex: identityPrivate,
+          });
+
+          const nextSessionId = String(result?.sessionId || "").trim();
+          if (!result?.ok || !nextSessionId) {
+            return null;
+          }
+
+          if (nextSessionId !== pairing.sessionId) {
+            await setPairing({
+              ...pairing,
+              sessionId: nextSessionId,
+            });
+          }
+
+          return nextSessionId;
+        } catch {
+          return null;
+        }
+      };
+
+      const connectWithSession = async (sessionId: string) => {
+        await relayService.connect({
+          relayUrl: pairing.relayUrl,
+          sessionId,
+          identityPrivateKeyHex: identityPrivate,
+          bridgeIdentityPublicKey: pairing.bridgeIdentityPublicKey,
+          resolveSessionId,
+        });
+      };
+
+      let sessionIdToUse = pairing.sessionId;
+      const resolvedSessionId = await resolveSessionId();
+      if (resolvedSessionId) {
+        sessionIdToUse = resolvedSessionId;
+      }
+
+      if (pairing.expiryMs < Date.now()) {
+        if (!resolvedSessionId) {
+          setPairSheetOpen(true);
+          return;
+        }
+      }
+
+      try {
+        await connectWithSession(sessionIdToUse);
+      } catch {
+        const retriedSessionId = await resolveSessionId();
+        if (!retriedSessionId) {
+          throw new Error(
+            "Unable to connect and trusted resolve did not return a live session.",
+          );
+        }
+
+        await connectWithSession(retriedSessionId);
+      }
     }
 
-    void connect();
-  }, [pairing, privateKey, publicKey, setIdentity]);
+    void connect().catch((error) => {
+      console.warn("[mobile][relay/connect] failed", error);
+      setPairSheetOpen(true);
+    });
+  }, [pairing, privateKey, publicKey, setIdentity, setPairing]);
 
   useEffect(() => {
     return () => {
@@ -1225,6 +1456,16 @@ export default function ChatScreen() {
     setAssistantMessageId(null);
 
     try {
+      const initialized = await ensureCodexInitialized();
+      if (!initialized) {
+        throw new Error("Codex initialize failed.");
+      }
+
+      const normalizedActiveSessionId =
+        normalizeThreadReference(activeSessionId);
+      const selectedThreadRuntime = normalizedActiveSessionId
+        ? threadSelections[normalizedActiveSessionId] || null
+        : null;
       const collaborationMode: CollaborationModePayload | undefined =
         runtimePermission === "full"
           ? { mode: "auto" }
@@ -1233,7 +1474,7 @@ export default function ChatScreen() {
             : undefined;
 
       const requestParams: TurnStartRequestParams = {
-        threadId: activeSessionId || undefined,
+        threadId: normalizedActiveSessionId || undefined,
         input: [
           {
             type: "text",
@@ -1241,35 +1482,43 @@ export default function ChatScreen() {
           },
         ],
         model:
-          (activeSessionId ? threadSelections[activeSessionId]?.model : null) ||
+          selectedThreadRuntime?.model ||
           selectedModel ||
           runtimeModel ||
           undefined,
         effort:
-          (activeSessionId
-            ? threadSelections[activeSessionId]?.thinking
-            : null) ||
+          selectedThreadRuntime?.thinking ||
           selectedThinking ||
           runtimeThinking ||
           undefined,
         collaborationMode,
       };
 
-      await relayService.sendJson(buildRequest("turn/start", requestParams));
+      if (normalizedActiveSessionId) {
+        await resumeThread(normalizedActiveSessionId);
+      }
+
       console.log("[mobile][send] payload runtime", {
         model:
-          (activeSessionId ? threadSelections[activeSessionId]?.model : null) ||
-          selectedModel ||
-          runtimeModel ||
-          null,
+          selectedThreadRuntime?.model || selectedModel || runtimeModel || null,
         effort:
-          (activeSessionId
-            ? threadSelections[activeSessionId]?.thinking
-            : null) ||
+          selectedThreadRuntime?.thinking ||
           selectedThinking ||
           runtimeThinking ||
           null,
         collaborationMode: collaborationMode || null,
+        threadId: requestParams.threadId || null,
+      });
+      const turnStartResult = await relayService.requestJson<{
+        turnId?: string;
+        threadId?: string;
+      }>("turn/start", requestParams, 20_000);
+      console.log("[mobile][send] turn/start acknowledged", {
+        threadId:
+          String(turnStartResult?.threadId || "").trim() ||
+          requestParams.threadId ||
+          null,
+        turnId: String(turnStartResult?.turnId || "").trim() || null,
       });
       updateMessageDeliveryState(messageId, "sent");
     } catch (error) {
@@ -1292,6 +1541,7 @@ export default function ChatScreen() {
           projectId,
           sessionId,
         });
+        void resumeThread(sessionId);
         setSessionLoadTick((value) => value + 1);
       }}
     >

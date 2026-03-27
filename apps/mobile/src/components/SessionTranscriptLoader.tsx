@@ -46,7 +46,7 @@ export function SessionTranscriptLoader({
     let isCancelled = false;
 
     async function loadTranscript() {
-      const normalizedRef = (sessionRef || "").trim();
+      const normalizedRef = normalizeThreadReference(sessionRef);
       if (!normalizedRef) {
         return;
       }
@@ -172,4 +172,20 @@ export function SessionTranscriptLoader({
   }, [loadTick, replaceMessages, sessionRef, setDiffSnapshot]);
 
   return null;
+}
+
+function normalizeThreadReference(value: string | null | undefined) {
+  const normalized = String(value || "").trim();
+  if (!normalized) {
+    return "";
+  }
+
+  const uuidSuffix = normalized.match(
+    /([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})$/i,
+  );
+  if (uuidSuffix) {
+    return uuidSuffix[1].toLowerCase();
+  }
+
+  return normalized;
 }

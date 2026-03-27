@@ -29,6 +29,7 @@ type ConnectOptions = {
   sessionId: string;
   identityPrivateKeyHex: string;
   bridgeIdentityPublicKey?: string;
+  resolveSessionId?: () => Promise<string | null>;
 };
 
 const SECURE_PROTOCOL_VERSION = 1;
@@ -616,9 +617,30 @@ export class RelayService {
     const delayMs = Math.min(1000 * 2 ** (this.reconnectAttempts - 1), 30_000);
     this.reconnectTimer = setTimeout(() => {
       this.reconnectTimer = null;
-      if (this.activeOptions) {
-        void this.connect(this.activeOptions);
+      const currentOptions = this.activeOptions;
+      if (!currentOptions) {
+        return;
       }
+
+      void (async () => {
+        let nextOptions: ConnectOptions = currentOptions;
+        try {
+          const resolvedSessionId = await currentOptions.resolveSessionId?.();
+          if (
+            resolvedSessionId &&
+            resolvedSessionId !== nextOptions.sessionId
+          ) {
+            nextOptions = {
+              ...nextOptions,
+              sessionId: resolvedSessionId,
+            };
+            this.activeOptions = nextOptions;
+          }
+        } catch {
+          // Ignore resolver errors and retry with known session id.
+        }
+        await this.connect(nextOptions);
+      })();
     }, delayMs);
   }
 }

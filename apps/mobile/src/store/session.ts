@@ -4,6 +4,7 @@ import { create } from "zustand";
 type PairingState = {
   relayUrl: string;
   sessionId: string;
+  macDeviceId?: string;
   bridgeIdentityPublicKey: string;
   expiryMs: number;
 };
@@ -32,7 +33,10 @@ type SessionStore = {
   activeSessionId: string | null;
   setPairing: (pairing: PairingState) => Promise<void>;
   clearPairing: () => Promise<void>;
-  setMobileIdentity: (privateKeyHex: string, publicKeyHex: string) => Promise<void>;
+  setMobileIdentity: (
+    privateKeyHex: string,
+    publicKeyHex: string,
+  ) => Promise<void>;
   addProject: (project: Project) => void;
   removeProject: (projectId: string) => void;
   addSessionToProject: (projectId: string, session: ProjectSession) => void;
@@ -56,7 +60,11 @@ const ACTIVE_PROJECT_KEY = "active.project";
 const ACTIVE_SESSION_KEY = "active.session";
 const SECURESTORE_SAFE_VALUE_BYTES = 1900;
 
-const LEGACY_MOCK_PROJECT_IDS = new Set(["proj-web", "proj-mobile", "proj-backend"]);
+const LEGACY_MOCK_PROJECT_IDS = new Set([
+  "proj-web",
+  "proj-mobile",
+  "proj-backend",
+]);
 const SYNTHETIC_PROJECT_IDS = new Set(["paired-session"]);
 
 function isLegacyMockProjects(projects: Project[]) {
@@ -65,7 +73,9 @@ function isLegacyMockProjects(projects: Project[]) {
   }
 
   return projects.some(
-    (project) => LEGACY_MOCK_PROJECT_IDS.has(project.id) || SYNTHETIC_PROJECT_IDS.has(project.id),
+    (project) =>
+      LEGACY_MOCK_PROJECT_IDS.has(project.id) ||
+      SYNTHETIC_PROJECT_IDS.has(project.id),
   );
 }
 
@@ -224,17 +234,25 @@ export const useSessionStore = create<SessionStore>((set, get) => ({
     ]);
   },
   async load() {
-    const [pairingRaw, privateKeyHex, publicKeyHex, projectsRaw, activeProjectId, activeSessionId] =
-      await Promise.all([
-        SecureStore.getItemAsync(PAIRING_KEY),
-        SecureStore.getItemAsync(IDENTITY_PRIVATE_KEY),
-        SecureStore.getItemAsync(IDENTITY_PUBLIC_KEY),
-        SecureStore.getItemAsync(PROJECTS_KEY),
-        SecureStore.getItemAsync(ACTIVE_PROJECT_KEY),
-        SecureStore.getItemAsync(ACTIVE_SESSION_KEY),
-      ]);
+    const [
+      pairingRaw,
+      privateKeyHex,
+      publicKeyHex,
+      projectsRaw,
+      activeProjectId,
+      activeSessionId,
+    ] = await Promise.all([
+      SecureStore.getItemAsync(PAIRING_KEY),
+      SecureStore.getItemAsync(IDENTITY_PRIVATE_KEY),
+      SecureStore.getItemAsync(IDENTITY_PUBLIC_KEY),
+      SecureStore.getItemAsync(PROJECTS_KEY),
+      SecureStore.getItemAsync(ACTIVE_PROJECT_KEY),
+      SecureStore.getItemAsync(ACTIVE_SESSION_KEY),
+    ]);
 
-    let parsedProjects = projectsRaw ? (JSON.parse(projectsRaw) as Project[]) : [];
+    let parsedProjects = projectsRaw
+      ? (JSON.parse(projectsRaw) as Project[])
+      : [];
     let parsedActiveProjectId = activeProjectId || null;
     let parsedActiveSessionId = activeSessionId || null;
 

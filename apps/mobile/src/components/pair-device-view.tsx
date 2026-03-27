@@ -85,12 +85,14 @@ function parsePairingPayload(raw: string) {
     const parsed = JSON.parse(trimmed) as {
       relay?: string;
       sessionId?: string;
+      macDeviceId?: string;
       macIdentityPublicKey?: string;
       expiresAt?: number;
     };
 
     const relayUrl = parsed.relay?.trim() || "";
     const sessionId = parsed.sessionId?.trim() || "";
+    const macDeviceId = parsed.macDeviceId?.trim() || "";
     const bridgeIdentityPublicKey = parsed.macIdentityPublicKey?.trim() || "";
     const expiryMs = Number(parsed.expiresAt);
 
@@ -110,6 +112,7 @@ function parsePairingPayload(raw: string) {
     return {
       relayUrl: normalizeRelayUrl(relayUrl, raw),
       sessionId,
+      macDeviceId: macDeviceId || undefined,
       bridgeIdentityPublicKey,
       expiryMs,
     };
