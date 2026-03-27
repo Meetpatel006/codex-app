@@ -68,8 +68,7 @@ export const ProjectSidebar: React.FC<ProjectSidebarProps> = ({
   const [sortDirection, setSortDirection] = useState<"asc" | "desc">("asc");
 
   const screenWidth = Dimensions.get("window").width;
-  const sidebarWidth = Math.min(296, screenWidth * 0.82);
-
+  const sidebarWidth = screenWidth;
   const isDrawerOpen = useSharedValue(false);
   const translateX = useSharedValue(-sidebarWidth);
 

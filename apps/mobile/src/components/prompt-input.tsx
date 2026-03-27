@@ -1,12 +1,26 @@
-import React, { useState } from "react";
-import { View, StyleSheet, Pressable, Platform } from "react-native";
+import React, { useState, useRef, useCallback, useEffect } from "react";
+import {
+  View,
+  StyleSheet,
+  Pressable,
+  Platform,
+  Animated,
+  TextInput,
+  Text,
+  Keyboard,
+  KeyboardAvoidingView,
+} from "react-native";
+import { LinearGradient } from "expo-linear-gradient";
 import { SymbolView } from "expo-symbols";
-import { Input } from "./ui/input";
 import { Spacing } from "@/constants/theme";
 import { useTheme } from "@/hooks/use-theme";
 import { PromptExtras } from "./prompt-extras";
 import { ModelSelector } from "./model-selector";
 import { ReasoningSelector } from "./reasoning-selector";
+
+const PILL_HEIGHT = 56;
+const EXPANDED_HEIGHT = 130;
+const ANIMATION_DURATION = 280;
 
 interface PromptInputProps {
   onSend?: (text: string) => void;
@@ -14,7 +28,149 @@ interface PromptInputProps {
 
 export function PromptInput({ onSend }: PromptInputProps) {
   const [prompt, setPrompt] = useState("");
+  const [isFocused, setIsFocused] = useState(false);
+  const isFocusedRef = useRef(false);
   const theme = useTheme();
+  const inputRef = useRef<TextInput>(null);
+
+  // Animation values
+  const heightAnim = useRef(new Animated.Value(PILL_HEIGHT)).current;
+  const borderRadiusAnim = useRef(new Animated.Value(PILL_HEIGHT / 2)).current;
+  const pillOpacity = useRef(new Animated.Value(1)).current;
+  const expandedOpacity = useRef(new Animated.Value(0)).current;
+  const extrasOpacity = useRef(new Animated.Value(0)).current;
+  const extrasTranslate = useRef(new Animated.Value(8)).current;
+  const keyboardHeightAnim = useRef(new Animated.Value(0)).current;
+
+  // Sync keyboard height
+  useEffect(() => {
+    const showEvent = Platform.OS === "ios" ? "keyboardWillShow" : "keyboardDidShow";
+    const hideEvent = Platform.OS === "ios" ? "keyboardWillHide" : "keyboardDidHide";
+
+    const showSub = Keyboard.addListener(showEvent, (e) => {
+      Animated.spring(keyboardHeightAnim, {
+        toValue: e.endCoordinates.height,
+        useNativeDriver: false,
+        damping: 28,
+        stiffness: 200,
+      }).start();
+    });
+
+    const hideSub = Keyboard.addListener(hideEvent, () => {
+      Animated.spring(keyboardHeightAnim, {
+        toValue: 0,
+        useNativeDriver: false,
+        damping: 28,
+        stiffness: 200,
+      }).start();
+    });
+
+    return () => {
+      showSub.remove();
+      hideSub.remove();
+    };
+  }, []);
+
+  const animateToFocused = useCallback(() => {
+    isFocusedRef.current = true;
+    setIsFocused(true);
+    Animated.parallel([
+      Animated.timing(pillOpacity, {
+        toValue: 0,
+        duration: 120,
+        useNativeDriver: true,
+      }),
+      Animated.spring(heightAnim, {
+        toValue: EXPANDED_HEIGHT,
+        useNativeDriver: false,
+        damping: 20,
+        stiffness: 200,
+      }),
+      Animated.spring(borderRadiusAnim, {
+        toValue: 28,
+        useNativeDriver: false,
+        damping: 20,
+        stiffness: 200,
+      }),
+      Animated.sequence([
+        Animated.delay(100),
+        Animated.timing(expandedOpacity, {
+          toValue: 1,
+          duration: ANIMATION_DURATION - 100,
+          useNativeDriver: true,
+        }),
+      ]),
+      Animated.sequence([
+        Animated.delay(160),
+        Animated.parallel([
+          Animated.timing(extrasOpacity, {
+            toValue: 1,
+            duration: 200,
+            useNativeDriver: true,
+          }),
+          Animated.timing(extrasTranslate, {
+            toValue: 0,
+            duration: 220,
+            useNativeDriver: true,
+          }),
+        ]),
+      ]),
+    ]).start();
+  }, []);
+
+  const animateToCollapsed = useCallback(() => {
+    if (!isFocusedRef.current) return;
+    isFocusedRef.current = false;
+    inputRef.current?.blur();
+    Animated.parallel([
+      Animated.timing(extrasOpacity, {
+        toValue: 0,
+        duration: 120,
+        useNativeDriver: true,
+      }),
+      Animated.timing(extrasTranslate, {
+        toValue: 8,
+        duration: 120,
+        useNativeDriver: true,
+      }),
+      Animated.timing(expandedOpacity, {
+        toValue: 0,
+        duration: 140,
+        useNativeDriver: true,
+      }),
+      Animated.spring(heightAnim, {
+        toValue: PILL_HEIGHT,
+        useNativeDriver: false,
+        damping: 22,
+        stiffness: 220,
+      }),
+      Animated.spring(borderRadiusAnim, {
+        toValue: PILL_HEIGHT / 2,
+        useNativeDriver: false,
+        damping: 22,
+        stiffness: 220,
+      }),
+      Animated.sequence([
+        Animated.delay(120),
+        Animated.timing(pillOpacity, {
+          toValue: 1,
+          duration: 160,
+          useNativeDriver: true,
+        }),
+      ]),
+    ]).start(() => setIsFocused(false));
+  }, []);
+
+  // Collapse when keyboard hides (user taps outside or swipes down)
+  useEffect(() => {
+    const sub = Keyboard.addListener("keyboardDidHide", animateToCollapsed);
+    return () => sub.remove();
+  }, [animateToCollapsed]);
+
+  const handleFocus = useCallback(() => {
+    animateToFocused();
+    setTimeout(() => inputRef.current?.focus(), 80);
+  }, [animateToFocused]);
 
   const handleSend = () => {
     if (prompt.trim()) {
@@ -24,115 +180,244 @@ export function PromptInput({ onSend }: PromptInputProps) {
   };
 
   return (
-    <View style={styles.paddingContainer}>
-      <View
-        style={[
-          styles.innerContainer,
-          {
-            backgroundColor: theme.backgroundElement,
-            borderColor: theme.backgroundSelected,
-          },
-        ]}
+    <Animated.View
+      style={[
+        styles.keyboardAvoidingView,
+        { bottom: keyboardHeightAnim },
+      ]}
+    >
+      <LinearGradient
+        colors={["transparent", theme.background, theme.background]}
+        locations={[0, 1, 1]}
+        style={styles.gradientContainer}
       >
-        <Input
-          placeholder="Type your prompt..."
-          value={prompt}
-          onChangeText={setPrompt}
-          style={styles.input}
-          multiline={true}
-          textAlignVertical="top"
-        />
+        <View style={styles.paddingContainer}>
+          {/* Animated container */}
+          <Animated.View
+            style={[
+              styles.innerContainer,
+              {
+                backgroundColor: theme.backgroundElement,
+                borderColor: theme.backgroundSelected,
+                height: heightAnim,
+                borderRadius: borderRadiusAnim,
+              },
+            ]}
+          >
+            {/* PILL MODE — unfocused */}
+            <Animated.View
+              pointerEvents={isFocused ? "none" : "box-none"}
+              style={[styles.pillRow, { opacity: pillOpacity }]}
+            >
+              <Pressable onPress={handleFocus} style={styles.pillButton}>
+                <SymbolView
+                  name={{ ios: "plus", android: "add", web: "add" }}
+                  tintColor={theme.textSecondary}
+                  size={20}
+                  weight="bold"
+                />
+              </Pressable>
 
-        <View style={styles.bottomActions}>
-          <View style={styles.leftActions}>
-            <Pressable
-              style={({ pressed }) => [
-                styles.actionButton,
-                { backgroundColor: theme.background },
-                pressed && styles.pressed,
-              ]}
-            >
-              <SymbolView
-                name={{ ios: "plus", android: "add", web: "add" }}
-                tintColor={theme.textSecondary}
-                size={20}
-                weight="bold"
-              />
-            </Pressable>
-            <ModelSelector />
-            <ReasoningSelector />
-          </View>
+              <Pressable onPress={handleFocus} style={styles.pillCenter}>
+                <Text
+                  style={[styles.pillPlaceholder, { color: theme.textSecondary }]}
+                  numberOfLines={1}
+                >
+                  Ask anything...
+                </Text>
+              </Pressable>
 
-          <View style={styles.rightActions}>
-            <Pressable
-              style={({ pressed }) => [
-                styles.actionButton,
-                { backgroundColor: theme.background },
-                pressed && styles.pressed,
-              ]}
+              <Pressable style={styles.pillButton}>
+                <SymbolView
+                  name={{ ios: "mic.fill", android: "mic", web: "mic" }}
+                  tintColor={theme.textSecondary}
+                  size={20}
+                />
+              </Pressable>
+
+              <Pressable
+                onPress={handleSend}
+                style={[styles.pillSendButton, { backgroundColor: theme.text }]}
+              >
+                <SymbolView
+                  name={{
+                    ios: "arrow.up",
+                    android: "arrow_upward",
+                    web: "arrow_upward",
+                  }}
+                  tintColor={theme.background}
+                  size={16}
+                  weight="bold"
+                />
+              </Pressable>
+            </Animated.View>
+
+            {/* EXPANDED MODE — focused */}
+            <Animated.View
+              pointerEvents={isFocused ? "box-none" : "none"}
+              style={[styles.expandedContent, { opacity: expandedOpacity }]}
             >
-              <SymbolView
-                name={{ ios: "mic.fill", android: "mic", web: "mic" }}
-                tintColor={theme.textSecondary}
-                size={20}
+              <TextInput
+                ref={inputRef}
+                placeholder="Type your prompt..."
+                value={prompt}
+                onChangeText={setPrompt}
+                style={[
+                  styles.input,
+                  { color: theme.text },
+                ]}
+                placeholderTextColor={theme.textSecondary}
+                multiline={true}
+                textAlignVertical="top"
               />
-            </Pressable>
-            <Pressable
-              onPress={handleSend}
-              style={({ pressed }) => [
-                styles.sendButton,
-                { backgroundColor: theme.text },
-                pressed && styles.pressed,
-              ]}
-            >
-              <SymbolView
-                name={{
-                  ios: "arrow.up",
-                  android: "arrow_upward",
-                  web: "arrow_upward",
-                }}
-                tintColor={theme.background}
-                size={18}
-                weight="bold"
-              />
-            </Pressable>
-          </View>
+
+              <View style={styles.bottomActions}>
+                <View style={styles.leftActions}>
+                  <Pressable
+                    style={({ pressed }) => [
+                      styles.actionButton,
+                      pressed && styles.pressed,
+                    ]}
+                  >
+                    <SymbolView
+                      name={{ ios: "plus", android: "add", web: "add" }}
+                      tintColor={theme.textSecondary}
+                      size={20}
+                      weight="bold"
+                    />
+                  </Pressable>
+                  <ModelSelector />
+                  <ReasoningSelector />
+                </View>
+
+                <View style={styles.rightActions}>
+                  <Pressable
+                    style={({ pressed }) => [
+                      styles.actionButton,
+                      pressed && styles.pressed,
+                    ]}
+                  >
+                    <SymbolView
+                      name={{ ios: "mic.fill", android: "mic", web: "mic" }}
+                      tintColor={theme.textSecondary}
+                      size={20}
+                    />
+                  </Pressable>
+                  <Pressable
+                    onPress={handleSend}
+                    style={({ pressed }) => [
+                      styles.sendButton,
+                      { backgroundColor: theme.text },
+                      pressed && styles.pressed,
+                    ]}
+                  >
+                    <SymbolView
+                      name={{
+                        ios: "arrow.up",
+                        android: "arrow_upward",
+                        web: "arrow_upward",
+                      }}
+                      tintColor={theme.background}
+                      size={18}
+                      weight="bold"
+                    />
+                  </Pressable>
+                </View>
+              </View>
+            </Animated.View>
+          </Animated.View>
+
+          {/* Prompt Extras — animated in/out */}
+          <Animated.View
+            pointerEvents={isFocused ? "box-none" : "none"}
+            style={{
+              opacity: extrasOpacity,
+              transform: [{ translateY: extrasTranslate }],
+            }}
+          >
+            <PromptExtras />
+          </Animated.View>
         </View>
-      </View>
-      <PromptExtras />
-    </View>
+      </LinearGradient>
+    </Animated.View>
   );
 }
 
 const styles = StyleSheet.create({
+  keyboardAvoidingView: {
+    position: "absolute",
+    bottom: 0,
+    left: 0,
+    right: 0,
+    zIndex: 10,
+  },
+  gradientContainer: {
+    width: "100%",
+  },
   paddingContainer: {
     paddingHorizontal: 10,
-    paddingBottom: Platform.OS === "ios" ? 20 : Spacing.four,
+    paddingBottom: Platform.OS === "ios" ? 10 : Spacing.two,
   },
   innerContainer: {
-    flexDirection: "column",
     borderWidth: 1,
-    borderRadius: 28,
-    paddingTop: Spacing.one,
-    paddingBottom: Spacing.one,
-    paddingHorizontal: Spacing.one,
-    minHeight: 100,
-    maxHeight: 250,
-    justifyContent: "flex-start",
+    overflow: "hidden",
+    justifyContent: "center",
+  },
+
+  // --- PILL ---
+  pillRow: {
+    position: "absolute",
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    flexDirection: "row",
+    alignItems: "center",
+    paddingHorizontal: Spacing.two,
+    gap: Spacing.one,
+  },
+  pillButton: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    justifyContent: "center",
+    alignItems: "center",
+  },
+  pillCenter: {
+    flex: 1,
+    height: "100%",
+    justifyContent: "center",
+    paddingHorizontal: Spacing.two,
+  },
+  pillPlaceholder: {
+    fontSize: 16,
+  },
+  pillSendButton: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    justifyContent: "center",
+    alignItems: "center",
+  },
+
+  expandedContent: {
+    flex: 1,
+    flexDirection: "column",
   },
   input: {
-    paddingHorizontal: Spacing.two,
-    paddingTop: Spacing.one,
+    paddingHorizontal: Spacing.three,
+    paddingTop: Spacing.three,
     fontSize: 16,
-    minHeight: 65,
+    flex: 1,
+    textAlignVertical: "top",
   },
   bottomActions: {
     flexDirection: "row",
     justifyContent: "space-between",
     alignItems: "center",
-    marginTop: "auto",
-    paddingTop: Spacing.one,
     paddingHorizontal: Spacing.half,
+    paddingBottom: Spacing.one,
+    paddingTop: Spacing.one,
   },
   leftActions: {
     flexDirection: "row",

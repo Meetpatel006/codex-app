@@ -6,18 +6,13 @@ import React, {
   useState,
 } from "react";
 import { Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
+import { SafeAreaView } from "react-native-safe-area-context";
 
 import { MessageBubble } from "@/components/MessageBubble";
-import { PresenceIndicator } from "@/components/PresenceIndicator";
 import { SessionTranscriptLoader } from "@/components/SessionTranscriptLoader";
 import { ProjectSidebar } from "@/components/ProjectSidebar";
 import { PromptInput } from "@/components/prompt-input";
-import {
-  MenuIcon,
-  GitCommitIcon,
-  CodeDiffIcon,
-  QrCodeIcon,
-} from "@/components/icons/Icon";
+import { ChatHeader } from "@/components/chat-header";
 import { CodeDiffView } from "@/components/code-diff-view";
 import { GitCommitView } from "@/components/git-commit-view";
 import { PairDeviceView } from "@/components/pair-device-view";
@@ -82,20 +77,20 @@ type UpsertSystemMessageFn = (
 
 type RenderItem =
   | {
-      type: "message";
-      id: string;
-      message: ChatMessage;
-    }
+    type: "message";
+    id: string;
+    message: ChatMessage;
+  }
   | {
-      type: "command-group";
-      id: string;
-      commands: CommandExecutionData[];
-    }
+    type: "command-group";
+    id: string;
+    commands: CommandExecutionData[];
+  }
   | {
-      type: "file-change-group";
-      id: string;
-      fileChanges: FileChangeData[];
-    };
+    type: "file-change-group";
+    id: string;
+    fileChanges: FileChangeData[];
+  };
 
 type RelayMessageParams = {
   delta?: string;
@@ -118,8 +113,8 @@ type RelayMessageParams = {
   cwd?: string;
   working_directory?: string;
   status?:
-    | string
-    | { type?: string; statusType?: string; status_type?: string };
+  | string
+  | { type?: string; statusType?: string; status_type?: string };
   phase?: string;
   exitCode?: number;
   exit_code?: number;
@@ -696,10 +691,8 @@ export default function ChatScreen() {
     }
   }, []);
 
-  const presence = useChatStore((state) => state.presence);
   const messages = useChatStore((state) => state.messages);
   const renderItems = useMemo(() => buildRenderItems(messages), [messages]);
-  const setPresence = useChatStore((state) => state.setPresence);
   const addUserMessage = useChatStore((state) => state.addUserMessage);
   const appendAssistantDelta = useChatStore(
     (state) => state.appendAssistantDelta,
@@ -961,20 +954,12 @@ export default function ChatScreen() {
   }, [setRuntimeOptions, setRuntimeOptionsLoading, setRuntimeOptionsError]);
 
   useEffect(() => {
-    const onPresence = relayService.on("presence", (nextPresence) => {
-      setPresence(nextPresence);
-      if (nextPresence !== "online") {
-        codexInitializedRef.current = false;
-      }
-    });
-
     const onError = relayService.on("error", (error) => {
       console.warn("[mobile][relay/error]", error?.message || String(error));
     });
 
     const onReady = relayService.on("ready", () => {
       codexInitializedRef.current = false;
-      setPresence("online");
       void (async () => {
         void refreshCodexSessions().catch((error) => {
           console.warn("[mobile][codex/sessions/list] refresh failed", error);
@@ -1017,10 +1002,10 @@ export default function ChatScreen() {
       const resolveItemId = () =>
         String(
           eventPayload?.itemId ||
-            eventPayload?.item_id ||
-            eventPayload?.call_id ||
-            eventPayload?.callId ||
-            "",
+          eventPayload?.item_id ||
+          eventPayload?.call_id ||
+          eventPayload?.callId ||
+          "",
         );
 
       const getExistingAssistantText = (id: string | null | undefined) => {
@@ -1115,12 +1100,12 @@ export default function ChatScreen() {
             assistantMessageId;
           const text = String(
             itemObject?.message ||
-              itemObject?.text ||
-              itemObject?.summary ||
-              params?.message ||
-              eventPayload?.message ||
-              eventPayload?.text ||
-              "",
+            itemObject?.text ||
+            itemObject?.summary ||
+            params?.message ||
+            eventPayload?.message ||
+            eventPayload?.text ||
+            "",
           ).trim();
 
           if (id && text) {
@@ -1160,10 +1145,10 @@ export default function ChatScreen() {
         const delta = params?.delta || params?.textDelta || params?.chunk || "";
         const command = String(
           eventPayload?.command ||
-            eventPayload?.cmd ||
-            eventPayload?.raw_command ||
-            eventPayload?.rawCommand ||
-            "",
+          eventPayload?.cmd ||
+          eventPayload?.raw_command ||
+          eventPayload?.rawCommand ||
+          "",
         );
         const cwd = String(
           eventPayload?.cwd || eventPayload?.working_directory || "",
@@ -1207,10 +1192,10 @@ export default function ChatScreen() {
           "";
         const command = String(
           eventPayload?.command ||
-            eventPayload?.cmd ||
-            eventPayload?.raw_command ||
-            eventPayload?.rawCommand ||
-            "",
+          eventPayload?.cmd ||
+          eventPayload?.raw_command ||
+          eventPayload?.rawCommand ||
+          "",
         );
         const cwd = String(
           eventPayload?.cwd || eventPayload?.working_directory || "",
@@ -1300,7 +1285,6 @@ export default function ChatScreen() {
     });
 
     return () => {
-      onPresence();
       onError();
       onReady();
       onMessage();
@@ -1320,7 +1304,6 @@ export default function ChatScreen() {
     fetchCodexModelOptions,
     fetchCodexModelOptionsFallback,
     setDiffSnapshot,
-    setPresence,
   ]);
 
   useEffect(() => {
@@ -1545,87 +1528,24 @@ export default function ChatScreen() {
         setSessionLoadTick((value) => value + 1);
       }}
     >
-      <View
+      <SafeAreaView
         style={StyleSheet.flatten([
           styles.container,
           { backgroundColor: theme.background },
         ])}
+        edges={["top", "left", "right"]}
       >
         <SessionTranscriptLoader
           sessionRef={activeSessionId}
           loadTick={sessionLoadTick}
         />
 
-        <View style={styles.headerBlock}>
-          <View style={styles.header}>
-            <Pressable
-              onPress={() => setSidebarOpen(true)}
-              style={[
-                styles.sidebarIconButton,
-                {
-                  backgroundColor: theme.backgroundElement,
-                  borderColor: theme.backgroundSelected,
-                },
-              ]}
-              accessibilityLabel="Open sidebar"
-              hitSlop={8}
-            >
-              <MenuIcon size={22} color={theme.text} />
-            </Pressable>
-            <Text style={[styles.title, { color: theme.text }]}>Chat</Text>
-            <View style={styles.headerIcons}>
-              <View
-                style={StyleSheet.flatten([
-                  styles.headerActionPill,
-                  {
-                    backgroundColor: theme.backgroundElement,
-                    borderColor: theme.backgroundSelected,
-                  },
-                ])}
-              >
-                <Pressable
-                  onPress={() => setCommitSheetOpen(true)}
-                  style={styles.headerPillButton}
-                  accessibilityLabel="Open commit sheet"
-                  hitSlop={8}
-                >
-                  <GitCommitIcon size={22} color={theme.text} />
-                </Pressable>
-                <View
-                  style={[
-                    styles.headerPillSeparator,
-                    { backgroundColor: theme.backgroundSelected },
-                  ]}
-                />
-                <Pressable
-                  onPress={openDiffPanel}
-                  style={styles.headerPillButton}
-                  accessibilityLabel="Open diff panel"
-                  hitSlop={8}
-                >
-                  <CodeDiffIcon size={22} color={theme.text} />
-                </Pressable>
-              </View>
-              <Pressable
-                onPress={() => setPairSheetOpen(true)}
-                style={StyleSheet.flatten([
-                  styles.headerStandaloneButton,
-                  {
-                    backgroundColor: theme.backgroundElement,
-                    borderColor: theme.backgroundSelected,
-                  },
-                ])}
-                accessibilityLabel="Open pair device sheet"
-                hitSlop={8}
-              >
-                <QrCodeIcon size={22} color={theme.text} />
-              </Pressable>
-            </View>
-          </View>
-          <View style={styles.presenceRow}>
-            <PresenceIndicator status={presence} />
-          </View>
-        </View>
+        <ChatHeader
+          onOpenSidebar={() => setSidebarOpen(true)}
+          onOpenCommitSheet={() => setCommitSheetOpen(true)}
+          onOpenDiffPanel={openDiffPanel}
+          onOpenPairSheet={() => setPairSheetOpen(true)}
+        />
 
         <ScrollView
           style={styles.messages}
@@ -1673,7 +1593,7 @@ export default function ChatScreen() {
         </ScrollView>
 
         <PromptInput onSend={send} />
-      </View>
+      </SafeAreaView>
 
       <BottomSheet
         isVisible={commitSheetOpen}
@@ -1709,63 +1629,7 @@ export default function ChatScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    paddingTop: 48,
     gap: 10,
-  },
-  headerBlock: {
-    gap: 6,
-    marginBottom: 8,
-    paddingHorizontal: 10,
-  },
-  header: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    alignItems: "center",
-    gap: 12,
-    minHeight: 44,
-  },
-  headerIcons: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 8,
-  },
-  presenceRow: {
-    flexDirection: "row",
-    justifyContent: "flex-end",
-  },
-  sidebarIconButton: {
-    width: 42,
-    height: 42,
-    borderRadius: 21,
-    borderWidth: 1,
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  headerActionPill: {
-    minHeight: 42,
-    borderRadius: 21,
-    borderWidth: 1,
-    flexDirection: "row",
-    alignItems: "center",
-    overflow: "hidden",
-  },
-  headerPillButton: {
-    width: 44,
-    height: 42,
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  headerPillSeparator: {
-    width: 1,
-    height: 22,
-  },
-  headerStandaloneButton: {
-    width: 42,
-    height: 42,
-    borderRadius: 21,
-    borderWidth: 1,
-    alignItems: "center",
-    justifyContent: "center",
   },
   sessionButtonText: {
     fontSize: 13,
@@ -1782,8 +1646,8 @@ const styles = StyleSheet.create({
   },
   messageContent: {
     paddingHorizontal: 10,
-    paddingTop: 12,
-    paddingBottom: 8,
+    paddingTop: 56,
+    paddingBottom: 200,
     gap: 20,
   },
 });
