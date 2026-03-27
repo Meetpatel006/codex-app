@@ -1,5 +1,5 @@
 import Constants from "expo-constants";
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useMemo, useState } from "react";
 import { CameraView, useCameraPermissions } from "expo-camera";
 import {
   Alert,
@@ -13,6 +13,7 @@ import {
 } from "react-native";
 
 import { useSessionStore } from "@/store/session";
+import { useTheme } from "@/hooks/use-theme";
 
 type PairDeviceViewProps = {
   onPaired?: () => void;
@@ -145,6 +146,9 @@ function parsePairingPayload(raw: string) {
 }
 
 export function PairDeviceView({ onPaired }: PairDeviceViewProps) {
+  const colors = useTheme();
+  const themedStyles = useMemo(() => createStyles(colors), [colors]);
+
   const pairing = useSessionStore((state) => state.pairing);
   const setPairing = useSessionStore((state) => state.setPairing);
   const [payload, setPayload] = useState("");
@@ -256,47 +260,47 @@ export function PairDeviceView({ onPaired }: PairDeviceViewProps) {
   }
 
   return (
-    <View style={styles.container}>
-      <Text style={styles.title}>Pair Device</Text>
-      <Text style={styles.copy}>
+    <View style={themedStyles.container}>
+      <Text style={themedStyles.title}>Pair Device</Text>
+      <Text style={themedStyles.copy}>
         Paste bridge QR JSON payload (or legacy
         relayUrl|sessionId|bridgePublicKey|expiryMs)
       </Text>
-      <Text style={styles.copy}>
+      <Text style={themedStyles.copy}>
         Tip: You can paste exp://IP:8081 to auto-update relay host to
         ws://IP:9000/relay.
       </Text>
       <TextInput
         value={payload}
         onChangeText={setPayload}
-        style={styles.input}
+        style={themedStyles.input}
         multiline
         autoCapitalize="none"
         autoCorrect={false}
         placeholder='{"v":2,"relay":"ws://10.0.2.2:9000/relay","sessionId":"...","macIdentityPublicKey":"...","expiresAt":1735000000000}'
-        placeholderTextColor="#777"
+        placeholderTextColor={colors.textSecondary}
       />
-      <Pressable style={styles.scanButton} onPress={() => void openScanner()}>
-        <Text style={styles.buttonText}>Scan QR with Camera</Text>
+      <Pressable style={themedStyles.scanButton} onPress={() => void openScanner()}>
+        <Text style={themedStyles.buttonText}>Scan QR with Camera</Text>
       </Pressable>
-      <Text style={styles.copy}>Or set relay URL directly:</Text>
+      <Text style={themedStyles.copy}>Or set relay URL directly:</Text>
       <TextInput
         value={relayUrlInput}
         onChangeText={setRelayUrlInput}
-        style={styles.urlInput}
+        style={themedStyles.urlInput}
         autoCapitalize="none"
         autoCorrect={false}
         placeholder="ws://10.31.235.240:9000/relay"
-        placeholderTextColor="#777"
+        placeholderTextColor={colors.textSecondary}
       />
-      <Pressable style={styles.button} onPress={() => void onPair()}>
-        <Text style={styles.buttonText}>Save Pairing</Text>
+      <Pressable style={themedStyles.button} onPress={() => void onPair()}>
+        <Text style={themedStyles.buttonText}>Save Pairing</Text>
       </Pressable>
       <Pressable
-        style={styles.secondaryButton}
+        style={themedStyles.secondaryButton}
         onPress={() => void onSaveRelayUrl()}
       >
-        <Text style={styles.buttonText}>Save URL Only</Text>
+        <Text style={themedStyles.buttonText}>Save URL Only</Text>
       </Pressable>
 
       <Modal
@@ -305,27 +309,27 @@ export function PairDeviceView({ onPaired }: PairDeviceViewProps) {
         presentationStyle="fullScreen"
         onRequestClose={() => setScannerOpen(false)}
       >
-        <View style={styles.scannerContainer}>
+        <View style={themedStyles.scannerContainer}>
           <CameraView
-            style={styles.camera}
+            style={themedStyles.camera}
             facing="back"
             barcodeScannerSettings={{
               barcodeTypes: ["qr", "aztec", "pdf417", "code128", "code39"],
             }}
             onBarcodeScanned={({ data }) => onScanned(data)}
           />
-          <View style={styles.scannerOverlay} pointerEvents="box-none">
-            <View style={styles.scannerHeader}>
+          <View style={themedStyles.scannerOverlay} pointerEvents="box-none">
+            <View style={themedStyles.scannerHeader}>
               <Pressable
-                style={styles.scannerCloseButton}
+                style={themedStyles.scannerCloseButton}
                 onPress={() => setScannerOpen(false)}
               >
-                <Text style={styles.buttonText}>Close</Text>
+                <Text style={themedStyles.buttonText}>Close</Text>
               </Pressable>
             </View>
-            <View style={styles.scannerGuideBox}>
-              <Text style={styles.scannerGuideTitle}>Scan Pairing QR</Text>
-              <Text style={styles.scannerGuideText}>
+            <View style={themedStyles.scannerGuideBox}>
+              <Text style={themedStyles.scannerGuideTitle}>Scan Pairing QR</Text>
+              <Text style={themedStyles.scannerGuideText}>
                 Point camera at desktop pairing QR. It will auto-save.
               </Text>
             </View>
@@ -336,101 +340,111 @@ export function PairDeviceView({ onPaired }: PairDeviceViewProps) {
   );
 }
 
-const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: "#0b0b0b",
-    padding: 16,
-    gap: 12,
-  },
-  title: {
-    color: "#f0f0f0",
-    fontSize: 24,
-    fontWeight: "700",
-  },
-  copy: {
-    color: "#c8c8c8",
-  },
-  input: {
-    minHeight: 140,
-    borderRadius: 10,
-    borderWidth: 1,
-    borderColor: "#333",
-    color: "#f0f0f0",
-    padding: 10,
-    backgroundColor: "#161616",
-  },
-  urlInput: {
-    borderRadius: 10,
-    borderWidth: 1,
-    borderColor: "#333",
-    color: "#f0f0f0",
-    padding: 10,
-    backgroundColor: "#161616",
-  },
-  button: {
-    borderRadius: 10,
-    backgroundColor: "#2f5f2f",
-    paddingVertical: 12,
-    alignItems: "center",
-  },
-  scanButton: {
-    borderRadius: 10,
-    backgroundColor: "#2a4f7f",
-    paddingVertical: 12,
-    alignItems: "center",
-  },
-  secondaryButton: {
-    borderRadius: 10,
-    backgroundColor: "#35537a",
-    paddingVertical: 12,
-    alignItems: "center",
-  },
-  buttonText: {
-    color: "#fff",
-    fontWeight: "700",
-  },
-  scannerContainer: {
-    flex: 1,
-    backgroundColor: "#000",
-  },
-  camera: {
-    flex: 1,
-  },
-  scannerOverlay: {
-    ...StyleSheet.absoluteFillObject,
-    justifyContent: "space-between",
-    paddingTop: 52,
-    paddingBottom: 36,
-  },
-  scannerHeader: {
-    paddingHorizontal: 16,
-    alignItems: "flex-end",
-  },
-  scannerCloseButton: {
-    backgroundColor: "rgba(0,0,0,0.6)",
-    borderRadius: 8,
-    paddingHorizontal: 12,
-    paddingVertical: 8,
-  },
-  scannerGuideBox: {
-    marginHorizontal: 16,
-    borderRadius: 12,
-    backgroundColor: "rgba(0,0,0,0.65)",
-    borderWidth: 1,
-    borderColor: "rgba(255,255,255,0.2)",
-    paddingHorizontal: 14,
-    paddingVertical: 12,
-  },
-  scannerGuideTitle: {
-    color: "#fff",
-    fontSize: 16,
-    fontWeight: "700",
-    marginBottom: 4,
-  },
-  scannerGuideText: {
-    color: "#dcdcdc",
-    fontSize: 13,
-    lineHeight: 18,
-  },
-});
+const createStyles = (colors: ReturnType<typeof useTheme>) =>
+  StyleSheet.create({
+    container: {
+      flex: 1,
+      backgroundColor: colors.background,
+      padding: 16,
+      gap: 12,
+    },
+    title: {
+      color: colors.text,
+      fontSize: 24,
+      fontWeight: "700",
+      marginBottom: 8,
+    },
+    copy: {
+      color: colors.textSecondary,
+      fontSize: 13,
+      lineHeight: 18,
+    },
+    input: {
+      minHeight: 140,
+      borderRadius: 14,
+      borderWidth: 1,
+      borderColor: colors.backgroundSelected,
+      color: colors.text,
+      padding: 14,
+      backgroundColor: colors.backgroundElement,
+      fontSize: 14,
+    },
+    urlInput: {
+      borderRadius: 14,
+      borderWidth: 1,
+      borderColor: colors.backgroundSelected,
+      color: colors.text,
+      padding: 14,
+      backgroundColor: colors.backgroundElement,
+      fontSize: 14,
+    },
+    button: {
+      borderRadius: 14,
+      backgroundColor: colors.successColor,
+      paddingVertical: 14,
+      alignItems: "center",
+      marginTop: 8,
+    },
+    scanButton: {
+      borderRadius: 14,
+      backgroundColor: colors.userBubble,
+      paddingVertical: 14,
+      alignItems: "center",
+      marginVertical: 4,
+    },
+    secondaryButton: {
+      borderRadius: 14,
+      backgroundColor: colors.backgroundSelected,
+      paddingVertical: 14,
+      alignItems: "center",
+    },
+    buttonText: {
+      color: colors.userText,
+      fontWeight: "700",
+      fontSize: 15,
+    },
+    scannerContainer: {
+      flex: 1,
+      backgroundColor: "#000",
+    },
+    camera: {
+      flex: 1,
+    },
+    scannerOverlay: {
+      ...StyleSheet.absoluteFillObject,
+      justifyContent: "space-between",
+      paddingTop: 52,
+      paddingBottom: 36,
+    },
+    scannerHeader: {
+      paddingHorizontal: 16,
+      alignItems: "flex-end",
+    },
+    scannerCloseButton: {
+      backgroundColor: "rgba(0,0,0,0.6)",
+      borderRadius: 10,
+      paddingHorizontal: 16,
+      paddingVertical: 10,
+    },
+    scannerGuideBox: {
+      marginHorizontal: 16,
+      borderRadius: 16,
+      backgroundColor: "rgba(0,0,0,0.7)",
+      borderWidth: 1,
+      borderColor: "rgba(255,255,255,0.2)",
+      paddingHorizontal: 16,
+      paddingVertical: 14,
+    },
+    scannerGuideTitle: {
+      color: "#fff",
+      fontSize: 17,
+      fontWeight: "700",
+      marginBottom: 6,
+    },
+    scannerGuideText: {
+      color: "#f0f0f0",
+      fontSize: 14,
+      lineHeight: 20,
+    },
+  });
+

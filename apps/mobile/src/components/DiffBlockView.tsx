@@ -1,5 +1,5 @@
 import React, { useMemo } from "react";
-import { Pressable, StyleSheet, Text, View } from "react-native";
+import { Platform, Pressable, StyleSheet, Text, View } from "react-native";
 import { DiffLineKind, parseDiffLine } from "@/utils/markdown-parser";
 import { useTheme } from "@/hooks/use-theme";
 
@@ -94,23 +94,29 @@ function getTextStyle(
 const createStyles = (colors: ReturnType<typeof useTheme>) =>
   StyleSheet.create({
     container: {
-      borderRadius: 8,
+      borderRadius: 12,
+      borderWidth: 1,
+      borderColor: colors.codeBorder,
       overflow: "hidden",
-      marginVertical: 8,
+      marginVertical: 12,
     },
     header: {
       flexDirection: "row",
       justifyContent: "space-between",
       alignItems: "center",
-      paddingHorizontal: 12,
-      paddingVertical: 8,
+      paddingHorizontal: 16,
+      paddingVertical: 10,
       backgroundColor: colors.codeHeaderBackground,
+      borderBottomWidth: 1,
+      borderBottomColor: colors.codeBorder,
     },
     languageLabel: {
       color: colors.textSecondary,
-      fontSize: 12,
-      fontFamily: "monospace",
-      textTransform: "lowercase",
+      fontSize: 11,
+      fontWeight: "700",
+      fontFamily: Platform.OS === "ios" ? "Menlo" : "monospace",
+      textTransform: "uppercase",
+      letterSpacing: 0.5,
     },
     openButton: {
       paddingHorizontal: 8,
@@ -123,14 +129,16 @@ const createStyles = (colors: ReturnType<typeof useTheme>) =>
     },
     diffContainer: {
       backgroundColor: colors.codeBackground,
+      paddingVertical: 8,
     },
     lineContainer: {
-      paddingHorizontal: 12,
-      paddingVertical: 2,
+      paddingHorizontal: 16,
+      paddingVertical: 3,
+      flexDirection: "row",
     },
     lineText: {
-      fontSize: 13,
-      fontFamily: "monospace",
+      fontSize: 12,
+      fontFamily: Platform.OS === "ios" ? "Menlo" : "monospace",
       lineHeight: 18,
     },
     // Addition line (green)

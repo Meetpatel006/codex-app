@@ -1509,91 +1509,92 @@ export default function ChatScreen() {
       updateMessageDeliveryState(messageId, "failed");
     }
   }
-
   return (
-    <ProjectSidebar
-      isOpen={sidebarOpen}
-      gesturesEnabled={!pairSheetOpen && !isDiffPanelOpen}
-      onOpen={() => setSidebarOpen(true)}
-      onClose={() => setSidebarOpen(false)}
-      onProjectSelect={(projectId) => {
-        console.log("[mobile][sidebar] project selected", { projectId });
-      }}
-      onSessionSelect={(projectId, sessionId) => {
-        console.log("[mobile][sidebar] session selected", {
-          projectId,
-          sessionId,
-        });
-        void resumeThread(sessionId);
-        setSessionLoadTick((value) => value + 1);
-      }}
-    >
-      <SafeAreaView
-        style={StyleSheet.flatten([
-          styles.container,
-          { backgroundColor: theme.background },
-        ])}
-        edges={["top", "left", "right"]}
+    <>
+      <ProjectSidebar
+        isOpen={sidebarOpen}
+        gesturesEnabled={!pairSheetOpen && !isDiffPanelOpen}
+        onOpen={() => setSidebarOpen(true)}
+        onClose={() => setSidebarOpen(false)}
+        onProjectSelect={(projectId) => {
+          console.log("[mobile][sidebar] project selected", { projectId });
+        }}
+        onSessionSelect={(projectId, sessionId) => {
+          console.log("[mobile][sidebar] session selected", {
+            projectId,
+            sessionId,
+          });
+          void resumeThread(sessionId);
+          setSessionLoadTick((value) => value + 1);
+        }}
       >
-        <SessionTranscriptLoader
-          sessionRef={activeSessionId}
-          loadTick={sessionLoadTick}
-        />
-
-        <ChatHeader
-          onOpenSidebar={() => setSidebarOpen(true)}
-          onOpenCommitSheet={() => setCommitSheetOpen(true)}
-          onOpenDiffPanel={openDiffPanel}
-          onOpenPairSheet={() => setPairSheetOpen(true)}
-        />
-
-        <ScrollView
-          style={styles.messages}
-          contentContainerStyle={styles.messageContent}
+        <SafeAreaView
+          style={StyleSheet.flatten([
+            styles.container,
+            { backgroundColor: theme.background },
+          ])}
+          edges={["top", "left", "right"]}
         >
-          {renderItems.map((item) => {
-            if (item.type === "command-group") {
+          <SessionTranscriptLoader
+            sessionRef={activeSessionId}
+            loadTick={sessionLoadTick}
+          />
+
+          <ChatHeader
+            onOpenSidebar={() => setSidebarOpen(true)}
+            onOpenCommitSheet={() => setCommitSheetOpen(true)}
+            onOpenDiffPanel={openDiffPanel}
+            onOpenPairSheet={() => setPairSheetOpen(true)}
+          />
+
+          <ScrollView
+            style={styles.messages}
+            contentContainerStyle={styles.messageContent}
+          >
+            {renderItems.map((item) => {
+              if (item.type === "command-group") {
+                return (
+                  <MessageBubble
+                    key={item.id}
+                    role="system"
+                    text=""
+                    kind="command-execution"
+                    commandExecutions={item.commands}
+                  />
+                );
+              }
+
+              if (item.type === "file-change-group") {
+                return (
+                  <MessageBubble
+                    key={item.id}
+                    role="system"
+                    text=""
+                    kind="file-change"
+                    fileChanges={item.fileChanges}
+                  />
+                );
+              }
+
+              const { message } = item;
               return (
                 <MessageBubble
-                  key={item.id}
-                  role="system"
-                  text=""
-                  kind="command-execution"
-                  commandExecutions={item.commands}
+                  key={message.id}
+                  role={message.role}
+                  text={message.text}
+                  streaming={message.isStreaming}
+                  kind={message.kind}
+                  deliveryState={message.deliveryState}
+                  commandExecution={message.commandExecution}
+                  fileChanges={message.fileChanges}
                 />
               );
-            }
+            })}
+          </ScrollView>
 
-            if (item.type === "file-change-group") {
-              return (
-                <MessageBubble
-                  key={item.id}
-                  role="system"
-                  text=""
-                  kind="file-change"
-                  fileChanges={item.fileChanges}
-                />
-              );
-            }
-
-            const { message } = item;
-            return (
-              <MessageBubble
-                key={message.id}
-                role={message.role}
-                text={message.text}
-                streaming={message.isStreaming}
-                kind={message.kind}
-                deliveryState={message.deliveryState}
-                commandExecution={message.commandExecution}
-                fileChanges={message.fileChanges}
-              />
-            );
-          })}
-        </ScrollView>
-
-        <PromptInput onSend={send} />
-      </SafeAreaView>
+          <PromptInput onSend={send} />
+        </SafeAreaView>
+      </ProjectSidebar>
 
       <BottomSheet
         isVisible={commitSheetOpen}
@@ -1622,7 +1623,7 @@ export default function ChatScreen() {
       <SidePanel isVisible={isDiffPanelOpen} onClose={closeDiffPanel}>
         <CodeDiffView onClose={closeDiffPanel} />
       </SidePanel>
-    </ProjectSidebar>
+    </>
   );
 }
 

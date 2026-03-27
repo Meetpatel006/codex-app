@@ -237,7 +237,7 @@ export function PromptInput({ onSend }: PromptInputProps) {
 
               <Pressable
                 onPress={handleSend}
-                style={[styles.pillSendButton, { backgroundColor: theme.text }]}
+                style={[styles.pillSendButton, { backgroundColor: theme.userBubble }]}
               >
                 <SymbolView
                   name={{
@@ -245,7 +245,7 @@ export function PromptInput({ onSend }: PromptInputProps) {
                     android: "arrow_upward",
                     web: "arrow_upward",
                   }}
-                  tintColor={theme.background}
+                  tintColor={theme.userText}
                   size={16}
                   weight="bold"
                 />
@@ -307,7 +307,7 @@ export function PromptInput({ onSend }: PromptInputProps) {
                     onPress={handleSend}
                     style={({ pressed }) => [
                       styles.sendButton,
-                      { backgroundColor: theme.text },
+                      { backgroundColor: theme.userBubble },
                       pressed && styles.pressed,
                     ]}
                   >
@@ -317,7 +317,7 @@ export function PromptInput({ onSend }: PromptInputProps) {
                         android: "arrow_upward",
                         web: "arrow_upward",
                       }}
-                      tintColor={theme.background}
+                      tintColor={theme.userText}
                       size={18}
                       weight="bold"
                     />

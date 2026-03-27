@@ -9,12 +9,12 @@ import {
   View,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
+import { LinearGradient } from "expo-linear-gradient";
 import { SymbolView } from "expo-symbols";
 import { useSessionStore } from "@/store/session";
 import {
   Gesture,
   GestureDetector,
-  GestureHandlerRootView,
 } from "react-native-gesture-handler";
 import Animated, {
   useSharedValue,
@@ -181,6 +181,8 @@ export const ProjectSidebar: React.FC<ProjectSidebarProps> = ({
   };
 
   const handleSessionPress = (projectId: string, sessionId: string) => {
+    setActiveProject(projectId); // Mark as active to keep expanded when reopened
+    setExpandedByProject((curr) => ({ ...curr, [projectId]: true })); // Explicit expansion
     updateProjectLastActive(projectId, sessionId);
     onSessionSelect(projectId, sessionId);
     onClose();
@@ -228,26 +230,54 @@ export const ProjectSidebar: React.FC<ProjectSidebarProps> = ({
             style={themedStyles.safeArea}
             edges={["top", "left", "bottom"]}
           >
-            <View style={themedStyles.header}>
-              <Text style={themedStyles.logoText}>codex-app</Text>
-              <View style={themedStyles.headerActions}>
-                <Pressable
-                  style={({ pressed }) => [
-                    themedStyles.headerButton,
-                    pressed && themedStyles.pressed,
-                  ]}
-                  onPress={() =>
-                    setSortDirection((d) => (d === "asc" ? "desc" : "asc"))
-                  }
-                >
-                  {sortDirection === "asc" ? (
-                    <SortAZIcon color={colors.textSecondary} size={20} />
-                  ) : (
-                    <SortZAIcon color={colors.textSecondary} size={20} />
-                  )}
-                </Pressable>
+            <LinearGradient
+              colors={[colors.background, colors.background, "transparent"]}
+              locations={[0, 0.6, 1]}
+              style={themedStyles.headerBlock}
+            >
+              <View style={themedStyles.header}>
+                <Text style={themedStyles.logoText}>Threads</Text>
+                <View style={themedStyles.headerActions}>
+                  <View style={themedStyles.actionPill}>
+                    <Pressable
+                      style={({ pressed }) => [
+                        themedStyles.pillButton,
+                        pressed && themedStyles.pressed,
+                      ]}
+                      onPress={() =>
+                        setSortDirection((d) => (d === "asc" ? "desc" : "asc"))
+                      }
+                    >
+                      {sortDirection === "asc" ? (
+                        <SortAZIcon color={colors.text} size={22} />
+                      ) : (
+                        <SortZAIcon color={colors.text} size={22} />
+                      )}
+                    </Pressable>
+
+                    <View style={themedStyles.pillSeparator} />
+
+                    <Pressable
+                      style={({ pressed }) => [
+                        themedStyles.pillButton,
+                        pressed && themedStyles.pressed,
+                      ]}
+                      onPress={() => {
+                      }}
+                    >
+                      <SymbolView
+                        name={{
+                          ios: "gearshape",
+                          android: "settings",
+                        }}
+                        tintColor={colors.text}
+                        size={22}
+                      />
+                    </Pressable>
+                  </View>
+                </View>
               </View>
-            </View>
+            </LinearGradient>
 
             <ScrollView contentContainerStyle={themedStyles.scrollContent}>
               {sortedProjects.map((project) => {
@@ -274,11 +304,11 @@ export const ProjectSidebar: React.FC<ProjectSidebarProps> = ({
                     >
                       {expanded ? (
                         <FolderOpenIcon
-                          size={18}
+                          size={20}
                           color={colors.textSecondary}
                         />
                       ) : (
-                        <FolderIcon size={18} color={colors.textSecondary} />
+                        <FolderIcon size={20} color={colors.textSecondary} />
                       )}
                       <Text style={themedStyles.menuItemText} numberOfLines={1}>
                         {project.name}
@@ -290,7 +320,7 @@ export const ProjectSidebar: React.FC<ProjectSidebarProps> = ({
                           web: expanded ? "expand_more" : "chevron_right",
                         }}
                         tintColor={colors.textSecondary}
-                        size={10}
+                        size={14}
                         style={themedStyles.chevron}
                       />
                     </Pressable>
@@ -338,23 +368,7 @@ export const ProjectSidebar: React.FC<ProjectSidebarProps> = ({
             </ScrollView>
 
             <View style={themedStyles.footer}>
-              <Pressable
-                style={({ pressed }) => [
-                  themedStyles.settingsButton,
-                  pressed && { opacity: 0.7 },
-                ]}
-              >
-                <SymbolView
-                  name={{
-                    ios: "gearshape",
-                    android: "settings",
-                    web: "settings",
-                  }}
-                  tintColor={colors.text}
-                  size={18}
-                />
-                <Text style={themedStyles.settingsText}>Settings</Text>
-              </Pressable>
+
 
               <View style={themedStyles.limitsContainer}>
                 <View style={themedStyles.limitItem}>
@@ -389,17 +403,12 @@ export const ProjectSidebar: React.FC<ProjectSidebarProps> = ({
   );
 
   return (
-    <GestureHandlerRootView
-      style={[themedStyles.wrapper, !children && StyleSheet.absoluteFillObject]}
-      pointerEvents={children ? "auto" : "box-none"}
-    >
-      <GestureDetector gesture={panGesture}>
-        <View style={themedStyles.innerWrapper}>
-          {children && <View style={themedStyles.content}>{children}</View>}
-          {overlayContent}
-        </View>
-      </GestureDetector>
-    </GestureHandlerRootView>
+    <GestureDetector gesture={panGesture}>
+      <View style={themedStyles.innerWrapper}>
+        {children && <View style={themedStyles.content}>{children}</View>}
+        {overlayContent}
+      </View>
+    </GestureDetector>
   );
 };
 
@@ -465,44 +474,71 @@ const createStyles = (colors: ReturnType<typeof useTheme>) =>
     safeArea: {
       flex: 1,
     },
+    headerBlock: {
+      position: "absolute",
+      top: 35,
+      left: 0,
+      right: 0,
+      zIndex: 10,
+      paddingBottom: 24,
+    },
     header: {
       flexDirection: "row",
       justifyContent: "space-between",
       alignItems: "center",
       paddingHorizontal: Spacing.four,
-      paddingTop: Platform.OS === "android" ? Spacing.five : Spacing.four,
-      paddingBottom: Spacing.two,
+      paddingTop: Platform.OS === "android" ? 5 : 5,
     },
     headerActions: {
       flexDirection: "row",
-      gap: Spacing.four,
       alignItems: "center",
+    },
+    actionPill: {
+      flexDirection: "row",
+      alignItems: "center",
+      backgroundColor: colors.backgroundElement,
+      borderColor: colors.backgroundSelected,
+      borderWidth: 1,
+      borderRadius: 24,
+      overflow: "hidden",
+    },
+    pillButton: {
+      width: 44,
+      height: 40,
+      alignItems: "center",
+      justifyContent: "center",
+    },
+    pillSeparator: {
+      width: 1,
+      height: 20,
+      backgroundColor: colors.backgroundSelected,
     },
     logoText: {
       fontSize: 16,
-      fontWeight: "600",
+      fontWeight: "700",
       color: colors.text,
-      letterSpacing: -0.3,
+      letterSpacing: -0.5,
+      marginLeft: 4,
     },
     headerButton: {
       padding: 2,
     },
     scrollContent: {
       paddingHorizontal: Spacing.two,
-      paddingTop: Spacing.two,
+      paddingTop: 60, // Account for absolute header
       paddingBottom: 40,
     },
     menuItem: {
       flexDirection: "row",
       alignItems: "center",
-      paddingVertical: 10,
+      paddingVertical: 12,
       paddingHorizontal: Spacing.three,
       borderRadius: 8,
       marginBottom: 4,
     },
     menuItemText: {
       marginLeft: Spacing.three,
-      fontSize: 14,
+      fontSize: 16,
       color: colors.text,
       fontWeight: "500",
       flex: 1,
@@ -515,7 +551,7 @@ const createStyles = (colors: ReturnType<typeof useTheme>) =>
       marginBottom: Spacing.two,
     },
     chatItem: {
-      paddingVertical: 6,
+      paddingVertical: 8,
       paddingLeft: Spacing.four + 12,
       paddingRight: Spacing.two,
       borderRadius: 6,
@@ -528,7 +564,7 @@ const createStyles = (colors: ReturnType<typeof useTheme>) =>
       marginTop: 1,
     },
     chatItemText: {
-      fontSize: 13,
+      fontSize: 15,
       color: colors.textSecondary,
       fontWeight: "400",
       flex: 1,
@@ -542,16 +578,7 @@ const createStyles = (colors: ReturnType<typeof useTheme>) =>
       paddingTop: Spacing.four,
       gap: Spacing.four,
     },
-    settingsButton: {
-      flexDirection: "row",
-      alignItems: "center",
-      gap: Spacing.two,
-    },
-    settingsText: {
-      fontSize: 14,
-      color: colors.text,
-      fontWeight: "500",
-    },
+
     limitsContainer: {
       gap: Spacing.three,
     },
@@ -564,12 +591,12 @@ const createStyles = (colors: ReturnType<typeof useTheme>) =>
       alignItems: "center",
     },
     limitLabel: {
-      fontSize: 12,
+      fontSize: 14,
       color: colors.textSecondary,
       fontWeight: "500",
     },
     limitValue: {
-      fontSize: 11,
+      fontSize: 13,
       color: colors.textSecondary,
     },
     progressBarBg: {

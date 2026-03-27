@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useMemo, useState } from "react";
 import { Dimensions, Pressable, StyleSheet, View } from "react-native";
 import { Gesture, GestureDetector } from "react-native-gesture-handler";
 import Animated, {
@@ -9,9 +9,10 @@ import Animated, {
   withTiming,
 } from "react-native-reanimated";
 import { SafeAreaView } from "react-native-safe-area-context";
+import { useTheme } from "@/hooks/use-theme";
 
 const { width: SCREEN_WIDTH } = Dimensions.get("window");
-const PANEL_WIDTH = SCREEN_WIDTH * 0.85;
+const PANEL_WIDTH = SCREEN_WIDTH;
 
 type SidePanelProps = {
   isVisible: boolean;
@@ -20,6 +21,7 @@ type SidePanelProps = {
 };
 
 export function SidePanel({ isVisible, onClose, children }: SidePanelProps) {
+  const theme = useTheme();
   const [isMounted, setIsMounted] = useState(isVisible);
   const translateX = useSharedValue(SCREEN_WIDTH);
   const opacity = useSharedValue(0);
@@ -76,6 +78,7 @@ export function SidePanel({ isVisible, onClose, children }: SidePanelProps) {
 
   const panelStyle = useAnimatedStyle(() => ({
     transform: [{ translateX: translateX.value }],
+    backgroundColor: theme.background,
   }));
 
   if (!isMounted) {
@@ -107,7 +110,7 @@ const styles = StyleSheet.create({
   },
   backdrop: {
     ...StyleSheet.absoluteFillObject,
-    backgroundColor: "rgba(0,0,0,0.4)",
+    backgroundColor: "rgba(0,0,0,0.5)",
   },
   panel: {
     position: "absolute",
@@ -115,11 +118,11 @@ const styles = StyleSheet.create({
     right: 0,
     bottom: 0,
     width: PANEL_WIDTH,
-    backgroundColor: "#FFFFFF",
     shadowColor: "#000",
-    shadowOffset: { width: -2, height: 0 },
-    shadowOpacity: 0.1,
-    shadowRadius: 10,
-    elevation: 5,
+    shadowOffset: { width: -4, height: 0 },
+    shadowOpacity: 0.15,
+    shadowRadius: 12,
+    elevation: 8,
   },
 });
+

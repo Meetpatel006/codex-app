@@ -1,6 +1,7 @@
 import React, { useMemo, useState } from "react";
 import { Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
 import { TerminalIcon } from "./icons/Icon";
+import { useTheme } from "@/hooks/use-theme";
 
 type CommandExecutionStatus = "running" | "completed" | "failed" | "stopped";
 
@@ -18,29 +19,31 @@ export function CommandExecutionCard({
   status,
   output,
 }: Props) {
+  const colors = useTheme();
+  const themedStyles = useMemo(() => createStyles(colors), [colors]);
   const [expanded, setExpanded] = useState(false);
   const statusText = getStatusText(status);
   const outputText = useMemo(() => buildOutputText(output, status), [output, status]);
 
   return (
-    <View style={styles.container}>
+    <View style={themedStyles.container}>
       <Pressable
-        style={styles.trigger}
+        style={themedStyles.trigger}
         onPress={() => setExpanded((value) => !value)}
         accessibilityRole="button"
         accessibilityState={{ expanded }}
         accessibilityLabel={expanded ? "Collapse command output" : "Expand command output"}
       >
-        <TerminalIcon size={16} color="#8c8c8c" />
-        <Text style={styles.commandLabel} numberOfLines={1}>
+        <TerminalIcon size={16} color={colors.textSecondary} />
+        <Text style={themedStyles.commandLabel} numberOfLines={1}>
           {statusText} "{command}"
         </Text>
       </Pressable>
 
       {expanded ? (
-        <View style={styles.outputSection}>
+        <View style={themedStyles.outputSection}>
           <ScrollView horizontal showsHorizontalScrollIndicator={false}>
-            <Text style={styles.outputText} selectable>
+            <Text style={themedStyles.outputText} selectable>
               {outputText}
             </Text>
           </ScrollView>
@@ -114,37 +117,39 @@ function sanitizeCommandOutput(text: string): string {
   return outputSectionSeen ? "No output captured." : text;
 }
 
-const styles = StyleSheet.create({
-  container: {
-    width: "100%",
-    alignSelf: "stretch",
-  },
-  trigger: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 10,
-    paddingHorizontal: 14,
-    paddingVertical: 13,
-  },
-  commandLabel: {
-    flex: 1,
-    color: "#8c8c8c",
-    fontSize: 13,
-    lineHeight: 18,
-    fontFamily: "monospace",
-  },
-  outputSection: {
-    borderTopWidth: 1,
-    borderTopColor: "#262626",
-    backgroundColor: "#101010",
-    paddingHorizontal: 14,
-    paddingVertical: 12,
-    maxHeight: 280,
-  },
-  outputText: {
-    color: "#e5e5e5",
-    fontSize: 13,
-    fontFamily: "monospace",
-    lineHeight: 18,
-  },
-});
+const createStyles = (colors: ReturnType<typeof useTheme>) =>
+  StyleSheet.create({
+    container: {
+      width: "100%",
+      alignSelf: "stretch",
+    },
+    trigger: {
+      flexDirection: "row",
+      alignItems: "center",
+      gap: 10,
+      paddingHorizontal: 14,
+      paddingVertical: 13,
+    },
+    commandLabel: {
+      flex: 1,
+      color: colors.textSecondary,
+      fontSize: 13,
+      lineHeight: 18,
+      fontFamily: "monospace",
+    },
+    outputSection: {
+      borderTopWidth: 1,
+      borderTopColor: colors.codeBorder,
+      backgroundColor: colors.codeBackground,
+      paddingHorizontal: 14,
+      paddingVertical: 12,
+      maxHeight: 280,
+    },
+    outputText: {
+      color: colors.codeText,
+      fontSize: 13,
+      fontFamily: "monospace",
+      lineHeight: 18,
+    },
+  });
+
