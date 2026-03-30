@@ -5,10 +5,11 @@ import React, {
   useRef,
   useState,
 } from "react";
-import { Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
+import { ScrollView, StyleSheet } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 
 import { MessageBubble } from "@/components/MessageBubble";
+import { ChatLoadingOverlay } from "@/components/ChatLoadingOverlay";
 import { SessionTranscriptLoader } from "@/components/SessionTranscriptLoader";
 import { ProjectSidebar } from "@/components/ProjectSidebar";
 import { PromptInput } from "@/components/prompt-input";
@@ -28,6 +29,7 @@ import type {
   ChatMessage,
   CommandExecutionData,
   FileChangeData,
+  ApprovalRequestData,
 } from "@/store/chat";
 import { useDiffStore } from "@/store/diff";
 import { useUiStore } from "@/store/ui";
@@ -56,6 +58,18 @@ type TurnStartRequestParams = {
   collaborationMode?: CollaborationModePayload;
 };
 
+type ThreadStartResponse = {
+  threadId?: string;
+  thread?: {
+    id?: string;
+    threadId?: string;
+  };
+};
+
+type ThreadStartRequestParams = {
+  cwd?: string;
+};
+
 type CodexSessionSummary = {
   sessionId?: string;
   threadId?: string;
@@ -78,20 +92,25 @@ type UpsertSystemMessageFn = (
 
 type RenderItem =
   | {
-    type: "message";
-    id: string;
-    message: ChatMessage;
-  }
+      type: "message";
+      id: string;
+      message: ChatMessage;
+    }
   | {
-    type: "command-group";
-    id: string;
-    commands: CommandExecutionData[];
-  }
+      type: "command-group";
+      id: string;
+      commands: CommandExecutionData[];
+    }
   | {
-    type: "file-change-group";
-    id: string;
-    fileChanges: FileChangeData[];
-  };
+      type: "file-change-group";
+      id: string;
+      fileChanges: FileChangeData[];
+    }
+  | {
+      type: "approval-group";
+      id: string;
+      approvals: ApprovalRequestData[];
+    };
 
 type RelayMessageParams = {
   delta?: string;
@@ -102,6 +121,10 @@ type RelayMessageParams = {
   message?: string;
   id?: string;
   threadId?: string;
+  thread?: {
+    id?: string;
+    threadId?: string;
+  };
   turnId?: string;
   itemId?: string;
   item_id?: string;
@@ -114,8 +137,8 @@ type RelayMessageParams = {
   cwd?: string;
   working_directory?: string;
   status?:
-  | string
-  | { type?: string; statusType?: string; status_type?: string };
+    | string
+    | { type?: string; statusType?: string; status_type?: string };
   phase?: string;
   exitCode?: number;
   exit_code?: number;
@@ -124,6 +147,15 @@ type RelayMessageParams = {
   duration_ms?: number;
   diff?: string;
   fileChanges?: FileChangeData[];
+  availableDecisions?: unknown[];
+  available_decisions?: unknown[];
+  proposedExecpolicyAmendment?: unknown;
+  proposed_execpolicy_amendment?: unknown;
+  requestId?: string | number;
+  grantRoot?: string | null;
+  grant_root?: string | null;
+  reason?: string | null;
+  changes?: Record<string, unknown>;
   item?: {
     id?: string;
     itemId?: string;
@@ -141,6 +173,186 @@ function normalizeEventToken(value: unknown) {
   return typeof value === "string"
     ? value.toLowerCase().replace(/[_-\s]+/g, "")
     : "";
+}
+
+function stringifyCommandValue(value: unknown) {
+  if (Array.isArray(value)) {
+    return value
+      .map((part) => String(part || "").trim())
+      .filter(Boolean)
+      .join(" ")
+      .trim();
+  }
+  return typeof value === "string" ? value.trim() : "";
+}
+
+function extractCommandFromActions(actions: unknown) {
+  if (!Array.isArray(actions)) {
+    return "";
+  }
+
+  for (const action of actions) {
+    if (!action || typeof action !== "object") {
+      continue;
+    }
+    const command = stringifyCommandValue(
+      (action as { command?: unknown }).command,
+    );
+    if (command) {
+      return command;
+    }
+  }
+
+  return "";
+}
+
+function normalizeAvailableDecisions(raw: unknown) {
+  return Array.isArray(raw) ? raw : [];
+}
+
+function pickApproveDecision(
+  availableDecisions: unknown[],
+  proposedExecpolicyAmendment: unknown,
+) {
+  const normalizedLabels = new Set(
+    availableDecisions
+      .map((decision) => {
+        if (typeof decision === "string") {
+          return normalizeEventToken(decision);
+        }
+        if (decision && typeof decision === "object") {
+          const key = Object.keys(decision as Record<string, unknown>)[0] || "";
+          return normalizeEventToken(key);
+        }
+        return "";
+      })
+      .filter(Boolean),
+  );
+
+  if (normalizedLabels.has("accept")) {
+    return "accept";
+  }
+  if (normalizedLabels.has("approved")) {
+    return "approved";
+  }
+  if (normalizedLabels.has("acceptforsession")) {
+    return "acceptForSession";
+  }
+
+  if (
+    normalizedLabels.has("acceptwithexecpolicyamendment") &&
+    proposedExecpolicyAmendment
+  ) {
+    return {
+      acceptWithExecpolicyAmendment: proposedExecpolicyAmendment,
+    };
+  }
+
+  return "accept";
+}
+
+function pickRejectDecision(availableDecisions: unknown[]) {
+  const normalizedLabels = new Set(
+    availableDecisions
+      .map((decision) => {
+        if (typeof decision === "string") {
+          return normalizeEventToken(decision);
+        }
+        if (decision && typeof decision === "object") {
+          const key = Object.keys(decision as Record<string, unknown>)[0] || "";
+          return normalizeEventToken(key);
+        }
+        return "";
+      })
+      .filter(Boolean),
+  );
+
+  if (normalizedLabels.has("cancel")) {
+    return "cancel";
+  }
+  if (normalizedLabels.has("abort")) {
+    return "abort";
+  }
+  if (normalizedLabels.has("decline")) {
+    return "decline";
+  }
+
+  return "cancel";
+}
+
+function pickFileRejectDecision(availableDecisions: unknown[]) {
+  const normalizedLabels = new Set(
+    availableDecisions
+      .map((decision) => {
+        if (typeof decision === "string") {
+          return normalizeEventToken(decision);
+        }
+        if (decision && typeof decision === "object") {
+          const key = Object.keys(decision as Record<string, unknown>)[0] || "";
+          return normalizeEventToken(key);
+        }
+        return "";
+      })
+      .filter(Boolean),
+  );
+
+  if (normalizedLabels.has("decline")) {
+    return "decline";
+  }
+  if (normalizedLabels.has("cancel")) {
+    return "cancel";
+  }
+  return "decline";
+}
+
+function normalizeRequestId(value: unknown): string | number | null {
+  if (typeof value === "number" && Number.isFinite(value)) {
+    return value;
+  }
+  if (typeof value === "string") {
+    const trimmed = value.trim();
+    if (trimmed) {
+      return trimmed;
+    }
+  }
+  return null;
+}
+
+function summarizePatchApprovalChanges(changes: unknown): string {
+  if (!changes || typeof changes !== "object" || Array.isArray(changes)) {
+    return "Approve file changes";
+  }
+
+  const paths = Object.keys(changes as Record<string, unknown>).filter(Boolean);
+  if (paths.length === 0) {
+    return "Approve file changes";
+  }
+
+  const names = paths.map((filePath) => {
+    const normalized = filePath.replace(/\\/g, "/");
+    const segments = normalized.split("/").filter(Boolean);
+    return segments[segments.length - 1] || normalized;
+  });
+
+  if (names.length === 1) {
+    return `Apply patch to ${names[0]}`;
+  }
+  if (names.length === 2) {
+    return `Apply patch to ${names[0]} and ${names[1]}`;
+  }
+
+  return `Apply patch to ${names[0]}, ${names[1]} +${names.length - 2} files`;
+}
+
+function extractPatchApprovalFilePaths(changes: unknown): string[] {
+  if (!changes || typeof changes !== "object" || Array.isArray(changes)) {
+    return [];
+  }
+
+  return Object.keys(changes as Record<string, unknown>)
+    .map((value) => String(value || "").trim())
+    .filter(Boolean)
+    .slice(0, 20);
 }
 
 function incomingItemObject(params?: RelayMessageParams) {
@@ -213,6 +425,39 @@ function buildRenderItems(messages: ChatMessage[]): RenderItem[] {
 
     if (
       message.role === "system" &&
+      message.kind === "approval" &&
+      message.approvalRequest &&
+      isFinalApprovalStatus(message.approvalRequest.status)
+    ) {
+      const approvals: ApprovalRequestData[] = [message.approvalRequest];
+      let nextIndex = index + 1;
+
+      while (nextIndex < messages.length) {
+        const nextMessage = messages[nextIndex];
+        if (
+          nextMessage.role !== "system" ||
+          nextMessage.kind !== "approval" ||
+          !nextMessage.approvalRequest ||
+          !isFinalApprovalStatus(nextMessage.approvalRequest.status)
+        ) {
+          break;
+        }
+
+        approvals.push(nextMessage.approvalRequest);
+        nextIndex += 1;
+      }
+
+      items.push({
+        type: "approval-group",
+        id: `approval-group-${message.id}`,
+        approvals,
+      });
+      index = nextIndex - 1;
+      continue;
+    }
+
+    if (
+      message.role === "system" &&
       message.kind === "file-change" &&
       message.fileChanges &&
       message.fileChanges.length > 0
@@ -257,6 +502,12 @@ function buildRenderItems(messages: ChatMessage[]): RenderItem[] {
   }
 
   return items;
+}
+
+function isFinalApprovalStatus(
+  status: ApprovalRequestData["status"] | undefined,
+) {
+  return status === "approved" || status === "rejected" || status === "error";
 }
 
 function getFileChangeGroupKey(fileChanges: FileChangeData[]) {
@@ -503,7 +754,6 @@ function isLowSignalTitleLine(line: string) {
     normalized === "ok" ||
     normalized === "okay" ||
     normalized === "yo" ||
-    normalized === "test" ||
     normalized === "ping"
   );
 }
@@ -551,11 +801,22 @@ export default function ChatScreen() {
     null,
   );
   const [sessionLoadTick, setSessionLoadTick] = useState(0);
+  const [chatLoading, setChatLoading] = useState(false);
 
   // Track command IDs by itemId across renders
   const commandIdMapRef = useRef(new Map<string, string>());
   const thinkingIdMapRef = useRef(new Map<string, string>());
+  const approvalMessageIdMapRef = useRef(new Map<string, string>());
+  const approvalRequestStateRef = useRef(
+    new Map<string, ApprovalRequestData>(),
+  );
   const codexInitializedRef = useRef(false);
+  const threadStartPromiseRef = useRef<Promise<string | null> | null>(null);
+  const threadStartRequestSeqRef = useRef(0);
+  const pendingFreshThreadIdsRef = useRef(new Set<string>());
+  const delayedSessionRefreshTimersRef = useRef(
+    new Set<ReturnType<typeof setTimeout>>(),
+  );
 
   const pairing = useSessionStore((state) => state.pairing);
   const loadSession = useSessionStore((state) => state.load);
@@ -572,6 +833,7 @@ export default function ChatScreen() {
   const activeProjectId = useSessionStore((state) => state.activeProjectId);
   const activeSessionId = useSessionStore((state) => state.activeSessionId);
   const setActiveProject = useSessionStore((state) => state.setActiveProject);
+  const setActiveSession = useSessionStore((state) => state.setActiveSession);
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [commitSheetOpen, setCommitSheetOpen] = useState(false);
   const [pairSheetOpen, setPairSheetOpen] = useState(false);
@@ -588,16 +850,33 @@ export default function ChatScreen() {
   const closeDiffPanel = useUiStore((state) => state.closeDiffPanel);
 
   const setRuntimeOptions = useRuntimeOptionsStore((state) => state.setOptions);
-  const setRuntimeOptionsLoading = useRuntimeOptionsStore((state) => state.setLoading,);
-  const setModelOptions = useRuntimeOptionsStore((state) => state.setModelOptions,);
-  const setRuntimeOptionsError = useRuntimeOptionsStore((state) => state.setError,);
+  const setRuntimeOptionsLoading = useRuntimeOptionsStore(
+    (state) => state.setLoading,
+  );
+  const setModelOptions = useRuntimeOptionsStore(
+    (state) => state.setModelOptions,
+  );
+  const setRuntimeOptionsError = useRuntimeOptionsStore(
+    (state) => state.setError,
+  );
   const selectedModel = useRuntimeOptionsStore((state) => state.selectedModel);
-  const selectedThinking = useRuntimeOptionsStore((state) => state.selectedThinking,);
-  const threadSelections = useRuntimeOptionsStore((state) => state.threadSelections,);
-  const loadRuntimeSelections = useRuntimeOptionsStore((state) => state.loadSelections,);
-  const runtimePermission = useRuntimeOptionsStore((state) => state.options.permission,);
+  const selectedThinking = useRuntimeOptionsStore(
+    (state) => state.selectedThinking,
+  );
+  const threadSelections = useRuntimeOptionsStore(
+    (state) => state.threadSelections,
+  );
+  const loadRuntimeSelections = useRuntimeOptionsStore(
+    (state) => state.loadSelections,
+  );
+  const runtimePermission = useRuntimeOptionsStore(
+    (state) => state.options.permission,
+  );
+
   const runtimeModel = useRuntimeOptionsStore((state) => state.options.model);
-  const runtimeThinking = useRuntimeOptionsStore((state) => state.options.thinking,);
+  const runtimeThinking = useRuntimeOptionsStore(
+    (state) => state.options.thinking,
+  );
 
   const fetchCodexModelOptions = useCallback(async () => {
     if (!relayService.isSecureReady()) {
@@ -694,6 +973,7 @@ export default function ChatScreen() {
   }, []);
 
   const messages = useChatStore((state) => state.messages);
+  const replaceMessages = useChatStore((state) => state.replaceMessages);
   const renderItems = useMemo(() => buildRenderItems(messages), [messages]);
   const addUserMessage = useChatStore((state) => state.addUserMessage);
   const appendAssistantDelta = useChatStore(
@@ -721,6 +1001,12 @@ export default function ChatScreen() {
   );
   const updateCommandExecution = useChatStore(
     (state) => state.updateCommandExecution,
+  );
+  const upsertApprovalRequest = useChatStore(
+    (state) => state.upsertApprovalRequest,
+  );
+  const updateApprovalRequest = useChatStore(
+    (state) => state.updateApprovalRequest,
   );
   const addFileChanges = useChatStore((state) => state.addFileChanges);
 
@@ -823,78 +1109,218 @@ export default function ChatScreen() {
     [gitCwd, loadCommitStatus],
   );
 
-  const refreshCodexSessions = useCallback(async () => {
-    if (!relayService.isSecureReady()) {
-      console.log(
-        "[mobile][codex/sessions/list] secure not ready; skipping refresh",
-      );
-      return;
-    }
-
-    console.log(
-      "[mobile][codex/sessions/list] requesting sessions from bridge...",
-    );
-    const rpcResult = await relayService.requestJson<CodexSessionsListResult>(
-      "codex/sessions/list",
-      {
-        limit: 150,
-      },
-    );
-    const sessions = Array.isArray(rpcResult?.sessions)
-      ? rpcResult.sessions
-      : [];
-    console.log(
-      `[mobile][codex/sessions/list] received ${sessions.length} sessions`,
-      sessions.slice(0, 3).map((session) => ({
-        sessionId: session.sessionId || session.threadId || "",
-        cwd: session.cwd || "",
-        updatedAtMs: session.updatedAtMs || 0,
-      })),
-    );
-    const mappedProjects = mapCodexSessionsToProjects(sessions);
-    if (mappedProjects.length === 0) {
-      console.log("[mobile][codex/sessions/list] no real sessions found");
-    }
-    console.log(
-      `[mobile][codex/sessions/list] mapped ${mappedProjects.length} projects`,
-      mappedProjects.map((project) => ({
-        id: project.id,
-        name: project.name,
-        sessionCount: project.sessions.length,
-      })),
-    );
-
-    let nextActiveProjectId = activeProjectId;
-    let nextActiveSessionId = activeSessionId;
-
-    if (
-      !nextActiveProjectId ||
-      !mappedProjects.some((project) => project.id === nextActiveProjectId)
-    ) {
-      nextActiveProjectId = mappedProjects[0]?.id || null;
-    }
-
-    if (nextActiveProjectId) {
-      const activeProject =
-        mappedProjects.find((project) => project.id === nextActiveProjectId) ||
-        null;
-      const hasActiveSession =
-        !!nextActiveSessionId &&
-        !!activeProject?.sessions.some(
-          (session) =>
-            normalizeThreadReference(session.id) ===
-            normalizeThreadReference(nextActiveSessionId),
+  const refreshCodexSessions = useCallback(
+    async (options?: {
+      preserveActiveSessionId?: string | null;
+      preserveActiveSessionTitle?: string | null;
+    }) => {
+      if (!relayService.isSecureReady()) {
+        console.log(
+          "[mobile][codex/sessions/list] secure not ready; skipping refresh",
         );
-      if (!hasActiveSession) {
-        nextActiveSessionId = activeProject?.sessions[0]?.id || null;
+        return;
       }
-    }
 
-    replaceProjects(mappedProjects, nextActiveProjectId, nextActiveSessionId);
-    console.log(
-      `[mobile][codex/sessions/list] store updated activeProject=${nextActiveProjectId || "none"} activeSession=${nextActiveSessionId || "none"}`,
-    );
-  }, [activeProjectId, activeSessionId, replaceProjects]);
+      console.log(
+        "[mobile][codex/sessions/list] requesting sessions from bridge...",
+      );
+      const rpcResult = await relayService.requestJson<CodexSessionsListResult>(
+        "codex/sessions/list",
+        {
+          limit: 150,
+        },
+      );
+      const sessions = Array.isArray(rpcResult?.sessions)
+        ? rpcResult.sessions
+        : [];
+      console.log(
+        `[mobile][codex/sessions/list] received ${sessions.length} sessions`,
+        sessions.slice(0, 3).map((session) => ({
+          sessionId: session.sessionId || session.threadId || "",
+          cwd: session.cwd || "",
+          updatedAtMs: session.updatedAtMs || 0,
+        })),
+      );
+      let mappedProjects = mapCodexSessionsToProjects(sessions);
+      if (mappedProjects.length === 0) {
+        console.log("[mobile][codex/sessions/list] no real sessions found");
+      }
+      console.log(
+        `[mobile][codex/sessions/list] mapped ${mappedProjects.length} projects`,
+        mappedProjects.map((project) => ({
+          id: project.id,
+          name: project.name,
+          sessionCount: project.sessions.length,
+        })),
+      );
+
+      const currentSessionState = useSessionStore.getState();
+      let nextActiveProjectId = currentSessionState.activeProjectId;
+      let nextActiveSessionId = currentSessionState.activeSessionId;
+      let didInjectOptimisticSession = false;
+      const preservedActiveSessionId = normalizeThreadReference(
+        options?.preserveActiveSessionId,
+      );
+      const preservedActiveSessionTitle = sanitizeSessionTitle(
+        options?.preserveActiveSessionTitle || "",
+      );
+
+      if (preservedActiveSessionId) {
+        nextActiveSessionId = preservedActiveSessionId;
+      }
+
+      if (
+        !nextActiveProjectId ||
+        !mappedProjects.some((project) => project.id === nextActiveProjectId)
+      ) {
+        nextActiveProjectId = mappedProjects[0]?.id || null;
+      }
+
+      if (preservedActiveSessionId && nextActiveProjectId) {
+        const projectIndex = mappedProjects.findIndex(
+          (project) => project.id === nextActiveProjectId,
+        );
+        let targetProject =
+          projectIndex >= 0 ? mappedProjects[projectIndex] : null;
+
+        if (targetProject && preservedActiveSessionTitle) {
+          let retitled = false;
+          const retitledSessions = targetProject.sessions.map((session) => {
+            if (
+              normalizeThreadReference(session.id) !== preservedActiveSessionId
+            ) {
+              return session;
+            }
+            if (
+              session.name !== "Untitled chat" &&
+              session.name !== "New chat"
+            ) {
+              return session;
+            }
+            retitled = true;
+            return {
+              ...session,
+              name: preservedActiveSessionTitle,
+            };
+          });
+
+          if (retitled) {
+            mappedProjects = [...mappedProjects];
+            targetProject = {
+              ...targetProject,
+              sessions: retitledSessions,
+            };
+            mappedProjects[projectIndex] = targetProject;
+          }
+        }
+
+        const hasPreservedSessionInProject = !!targetProject?.sessions.some(
+          (session) =>
+            normalizeThreadReference(session.id) === preservedActiveSessionId,
+        );
+
+        if (targetProject && !hasPreservedSessionInProject) {
+          const optimisticTimestamp = Date.now();
+          mappedProjects = [...mappedProjects];
+          mappedProjects[projectIndex] = {
+            ...targetProject,
+            sessions: [
+              {
+                id: preservedActiveSessionId,
+                name: preservedActiveSessionTitle || "New chat",
+                createdAt: optimisticTimestamp,
+                lastActiveAt: optimisticTimestamp,
+              },
+              ...targetProject.sessions,
+            ].sort((lhs, rhs) => rhs.lastActiveAt - lhs.lastActiveAt),
+          };
+          didInjectOptimisticSession = true;
+          console.log(
+            "[mobile][codex/sessions/list] injected optimistic session",
+            {
+              projectId: nextActiveProjectId,
+              sessionId: preservedActiveSessionId,
+            },
+          );
+        }
+      }
+
+      if (nextActiveProjectId) {
+        const activeProject =
+          mappedProjects.find(
+            (project) => project.id === nextActiveProjectId,
+          ) || null;
+        const normalizedNextActiveSessionId =
+          normalizeThreadReference(nextActiveSessionId);
+        const hasActiveSession =
+          !!normalizedNextActiveSessionId &&
+          !!activeProject?.sessions.some(
+            (session) =>
+              normalizeThreadReference(session.id) ===
+              normalizedNextActiveSessionId,
+          );
+        const shouldPreserveMissingSession =
+          !!normalizedNextActiveSessionId &&
+          (normalizedNextActiveSessionId === preservedActiveSessionId ||
+            pendingFreshThreadIdsRef.current.has(
+              normalizedNextActiveSessionId,
+            ));
+        const isOptimisticallyInjectedSession =
+          didInjectOptimisticSession &&
+          normalizedNextActiveSessionId === preservedActiveSessionId;
+
+        if (
+          hasActiveSession &&
+          normalizedNextActiveSessionId &&
+          !isOptimisticallyInjectedSession
+        ) {
+          pendingFreshThreadIdsRef.current.delete(
+            normalizedNextActiveSessionId,
+          );
+        }
+
+        if (
+          normalizedNextActiveSessionId &&
+          !hasActiveSession &&
+          !shouldPreserveMissingSession
+        ) {
+          nextActiveSessionId = activeProject?.sessions[0]?.id || null;
+        }
+      }
+
+      replaceProjects(mappedProjects, nextActiveProjectId, nextActiveSessionId);
+      console.log(
+        `[mobile][codex/sessions/list] store updated activeProject=${nextActiveProjectId || "none"} activeSession=${nextActiveSessionId || "none"}`,
+      );
+    },
+    [replaceProjects],
+  );
+
+  const scheduleDelayedSessionRefresh = useCallback(
+    (sessionId: string | null | undefined, sessionTitle?: string | null) => {
+      const normalizedSessionId = normalizeThreadReference(sessionId);
+      if (!normalizedSessionId) {
+        return;
+      }
+
+      const normalizedSessionTitle = sanitizeSessionTitle(sessionTitle || "");
+
+      const delaysMs = [1200, 3500];
+      delaysMs.forEach((delayMs) => {
+        const timer = setTimeout(() => {
+          delayedSessionRefreshTimersRef.current.delete(timer);
+          void refreshCodexSessions({
+            preserveActiveSessionId: normalizedSessionId,
+            preserveActiveSessionTitle: normalizedSessionTitle,
+          }).catch((error) => {
+            console.warn("[mobile][codex/sessions/list] refresh failed", error);
+          });
+        }, delayMs);
+        delayedSessionRefreshTimersRef.current.add(timer);
+      });
+    },
+    [refreshCodexSessions],
+  );
 
   const resumeThread = useCallback(
     async (threadId: string | null | undefined) => {
@@ -922,6 +1348,87 @@ export default function ChatScreen() {
       }
     },
     [],
+  );
+
+  const loadSelectedSession = useCallback(
+    (projectId: string, sessionId: string) => {
+      pendingFreshThreadIdsRef.current.clear();
+      approvalMessageIdMapRef.current.clear();
+      approvalRequestStateRef.current.clear();
+      setActiveProject(projectId);
+      setActiveSession(sessionId);
+      setChatLoading(true);
+      replaceMessages([]);
+      void resumeThread(sessionId);
+      setSessionLoadTick((value) => value + 1);
+    },
+    [replaceMessages, resumeThread, setActiveProject, setActiveSession],
+  );
+
+  const ensureActiveThread = useCallback(
+    async (forceNewThread = false, preferredCwd?: string | null) => {
+      const normalizedActiveSessionId = forceNewThread
+        ? ""
+        : normalizeThreadReference(activeSessionId);
+      if (normalizedActiveSessionId) {
+        return normalizedActiveSessionId;
+      }
+
+      if (!relayService.isSecureReady()) {
+        return null;
+      }
+
+      if (threadStartPromiseRef.current && !forceNewThread) {
+        return threadStartPromiseRef.current;
+      }
+
+      const requestedCwd =
+        String(preferredCwd || activeProject?.description || "").trim() || "";
+      const requestSeq = threadStartRequestSeqRef.current + 1;
+      threadStartRequestSeqRef.current = requestSeq;
+
+      const startThreadPromise = (async () => {
+        try {
+          const result = await relayService.requestJson<ThreadStartResponse>(
+            "thread/start",
+            requestedCwd
+              ? ({ cwd: requestedCwd } satisfies ThreadStartRequestParams)
+              : {},
+            20_000,
+          );
+          const nextThreadId = normalizeThreadReference(
+            result?.threadId || result?.thread?.id || result?.thread?.threadId,
+          );
+
+          if (nextThreadId) {
+            if (requestSeq === threadStartRequestSeqRef.current) {
+              pendingFreshThreadIdsRef.current.add(nextThreadId);
+              setActiveSession(nextThreadId);
+            }
+            console.log("[mobile][thread/start] created", {
+              threadId: nextThreadId,
+              cwd: requestedCwd || null,
+            });
+            return nextThreadId;
+          }
+
+          console.warn(
+            "[mobile][thread/start] missing thread id in response",
+            result,
+          );
+          return null;
+        } catch (error) {
+          console.warn("[mobile][thread/start] failed", error);
+          return null;
+        } finally {
+          threadStartPromiseRef.current = null;
+        }
+      })();
+
+      threadStartPromiseRef.current = startThreadPromise;
+      return startThreadPromise;
+    },
+    [activeProject?.description, activeSessionId, setActiveSession],
   );
 
   const fetchRuntimeOptions = useCallback(async () => {
@@ -1001,13 +1508,28 @@ export default function ChatScreen() {
       const params = message.params;
       const eventPayload = params?.msg || params;
 
+      if (message.method === "thread/started") {
+        const startedThreadId = normalizeThreadReference(
+          params?.threadId || params?.thread?.id || params?.thread?.threadId,
+        );
+        if (startedThreadId) {
+          setActiveSession(startedThreadId);
+          void refreshCodexSessions({
+            preserveActiveSessionId: startedThreadId,
+          }).catch((error) => {
+            console.warn("[mobile][codex/sessions/list] refresh failed", error);
+          });
+          scheduleDelayedSessionRefresh(startedThreadId);
+        }
+      }
+
       const resolveItemId = () =>
         String(
           eventPayload?.itemId ||
-          eventPayload?.item_id ||
-          eventPayload?.call_id ||
-          eventPayload?.callId ||
-          "",
+            eventPayload?.item_id ||
+            eventPayload?.call_id ||
+            eventPayload?.callId ||
+            "",
         );
 
       const getExistingAssistantText = (id: string | null | undefined) => {
@@ -1047,6 +1569,170 @@ export default function ChatScreen() {
         return commandId;
       };
 
+      const resolveApprovalRequestId = () => {
+        const method = String(message.method || "");
+        const canUseJsonRpcIdFallback = method.startsWith("item/");
+        const id = normalizeRequestId(
+          params?.requestId ??
+            eventPayload?.requestId ??
+            (canUseJsonRpcIdFallback
+              ? (payload as { id?: unknown })?.id
+              : undefined),
+        );
+        if (id == null) {
+          return null;
+        }
+        return id;
+      };
+
+      const resolveApprovalItemId = () => {
+        const raw = String(
+          params?.itemId ||
+            params?.item_id ||
+            eventPayload?.itemId ||
+            eventPayload?.item_id ||
+            eventPayload?.call_id ||
+            eventPayload?.callId ||
+            "",
+        ).trim();
+        return raw || null;
+      };
+
+      const resolveApprovalContext = () => {
+        const method = String(message.method || "");
+        const isFileChangeApproval =
+          method === "item/fileChange/requestApproval" ||
+          method === "codex/event/apply_patch_approval_request";
+
+        const requestId = resolveApprovalRequestId();
+        const itemId = resolveApprovalItemId();
+
+        const command = isFileChangeApproval
+          ? summarizePatchApprovalChanges(
+              eventPayload?.changes || params?.changes,
+            )
+          : stringifyCommandValue(eventPayload?.command || eventPayload?.cmd) ||
+            extractCommandFromActions(
+              (eventPayload as { commandActions?: unknown }).commandActions,
+            ) ||
+            "Approve command";
+
+        const workingDirectory = String(
+          eventPayload?.cwd ||
+            eventPayload?.working_directory ||
+            params?.cwd ||
+            params?.grantRoot ||
+            params?.grant_root ||
+            "",
+        ).trim();
+
+        const availableDecisions = normalizeAvailableDecisions(
+          eventPayload?.availableDecisions ||
+            eventPayload?.available_decisions ||
+            params?.availableDecisions ||
+            params?.available_decisions ||
+            (isFileChangeApproval
+              ? ["accept", "acceptForSession", "decline", "cancel"]
+              : []),
+        );
+
+        const proposedExecpolicyAmendment =
+          eventPayload?.proposedExecpolicyAmendment ||
+          eventPayload?.proposed_execpolicy_amendment ||
+          params?.proposedExecpolicyAmendment ||
+          params?.proposed_execpolicy_amendment;
+
+        const filePaths = isFileChangeApproval
+          ? extractPatchApprovalFilePaths(
+              eventPayload?.changes || params?.changes,
+            )
+          : [];
+
+        return {
+          requestId,
+          itemId,
+          command,
+          workingDirectory,
+          filePaths,
+          availableDecisions,
+          proposedExecpolicyAmendment,
+          isFileChangeApproval,
+        };
+      };
+
+      const getOrCreateApprovalMessageId = (
+        requestId: string | number,
+        itemId: string | null,
+      ) => {
+        const requestKey = String(requestId);
+        const existingByRequest =
+          approvalMessageIdMapRef.current.get(requestKey);
+        if (existingByRequest) {
+          return existingByRequest;
+        }
+
+        if (itemId) {
+          const existingByItem = approvalMessageIdMapRef.current.get(itemId);
+          if (existingByItem) {
+            approvalMessageIdMapRef.current.set(requestKey, existingByItem);
+            return existingByItem;
+          }
+        }
+
+        const created = `approval-${requestKey}`;
+        approvalMessageIdMapRef.current.set(requestKey, created);
+        if (itemId) {
+          approvalMessageIdMapRef.current.set(itemId, created);
+        }
+        return created;
+      };
+
+      const upsertApprovalFromEvent = () => {
+        const {
+          requestId,
+          itemId,
+          command,
+          workingDirectory,
+          filePaths,
+          availableDecisions,
+          proposedExecpolicyAmendment,
+          isFileChangeApproval,
+        } = resolveApprovalContext();
+        if (requestId == null) {
+          return null;
+        }
+
+        const nextState: ApprovalRequestData = {
+          requestId,
+          itemId: itemId || undefined,
+          approvalType: isFileChangeApproval ? "fileChange" : "command",
+          command,
+          workingDirectory: workingDirectory || undefined,
+          filePaths,
+          availableDecisions,
+          proposedExecpolicyAmendment,
+          status: "pending",
+        };
+
+        const stateKey = String(requestId);
+        approvalRequestStateRef.current.set(stateKey, nextState);
+        if (itemId) {
+          approvalRequestStateRef.current.set(itemId, nextState);
+        }
+
+        const approvalMessageId = getOrCreateApprovalMessageId(
+          requestId,
+          itemId,
+        );
+        upsertApprovalRequest(approvalMessageId, nextState);
+        return {
+          approvalMessageId,
+          requestId,
+          itemId,
+          state: nextState,
+        };
+      };
+
       // Handle message streaming
       if (message.method === "message/stream") {
         const id =
@@ -1055,9 +1741,7 @@ export default function ChatScreen() {
         appendAssistantDelta(id, params?.delta || "");
       }
 
-      if (
-        message.method === "item/agentMessage/delta"
-      ) {
+      if (message.method === "item/agentMessage/delta") {
         const itemObject = incomingItemObject(params);
         const id =
           resolveItemId() ||
@@ -1102,12 +1786,12 @@ export default function ChatScreen() {
             assistantMessageId;
           const text = String(
             itemObject?.message ||
-            itemObject?.text ||
-            itemObject?.summary ||
-            params?.message ||
-            eventPayload?.message ||
-            eventPayload?.text ||
-            "",
+              itemObject?.text ||
+              itemObject?.summary ||
+              params?.message ||
+              eventPayload?.message ||
+              eventPayload?.text ||
+              "",
           ).trim();
 
           if (id && text) {
@@ -1141,16 +1825,48 @@ export default function ChatScreen() {
         upsertSystemMessage(itemId, text, "normal");
       }
 
+      if (message.method === "item/commandExecution/requestApproval") {
+        upsertApprovalFromEvent();
+      }
+
+      if (
+        message.method === "item/fileChange/requestApproval" ||
+        message.method === "codex/event/apply_patch_approval_request"
+      ) {
+        upsertApprovalFromEvent();
+      }
+
+      if (message.method === "thread/status/changed") {
+        const status =
+          (eventPayload?.status as
+            | { activeFlags?: unknown[]; type?: string }
+            | undefined) ||
+          (params?.status as
+            | { activeFlags?: unknown[]; type?: string }
+            | undefined);
+        const activeFlags = Array.isArray(status?.activeFlags)
+          ? status?.activeFlags
+          : [];
+        const waitingOnApproval = activeFlags.some(
+          (flag) => normalizeEventToken(flag) === "waitingonapproval",
+        );
+        if (waitingOnApproval) {
+          console.log(
+            "[mobile][approval] thread waiting on approval; awaiting auto-response",
+          );
+        }
+      }
+
       // Handle command execution - new protocol
       if (message.method === "item/commandExecution/outputDelta") {
         const itemId = resolveItemId();
         const delta = params?.delta || params?.textDelta || params?.chunk || "";
         const command = String(
           eventPayload?.command ||
-          eventPayload?.cmd ||
-          eventPayload?.raw_command ||
-          eventPayload?.rawCommand ||
-          "",
+            eventPayload?.cmd ||
+            eventPayload?.raw_command ||
+            eventPayload?.rawCommand ||
+            "",
         );
         const cwd = String(
           eventPayload?.cwd || eventPayload?.working_directory || "",
@@ -1194,10 +1910,10 @@ export default function ChatScreen() {
           "";
         const command = String(
           eventPayload?.command ||
-          eventPayload?.cmd ||
-          eventPayload?.raw_command ||
-          eventPayload?.rawCommand ||
-          "",
+            eventPayload?.cmd ||
+            eventPayload?.raw_command ||
+            eventPayload?.rawCommand ||
+            "",
         );
         const cwd = String(
           eventPayload?.cwd || eventPayload?.working_directory || "",
@@ -1296,6 +2012,7 @@ export default function ChatScreen() {
     appendAssistantDelta,
     completeAssistantMessage,
     addCommandExecution,
+    upsertApprovalRequest,
     upsertSystemMessage,
     updateCommandExecution,
     addFileChanges,
@@ -1305,6 +2022,8 @@ export default function ChatScreen() {
     ensureCodexInitialized,
     fetchCodexModelOptions,
     fetchCodexModelOptionsFallback,
+    scheduleDelayedSessionRefresh,
+    setActiveSession,
     setDiffSnapshot,
   ]);
 
@@ -1427,10 +2146,142 @@ export default function ChatScreen() {
   }, [pairing, privateKey, publicKey, setIdentity, setPairing]);
 
   useEffect(() => {
+    const delayedRefreshTimers = delayedSessionRefreshTimersRef.current;
     return () => {
+      delayedRefreshTimers.forEach((timer) => {
+        clearTimeout(timer);
+      });
+      delayedRefreshTimers.clear();
       relayService.disconnect();
     };
   }, []);
+
+  const handleApproveRequest = useCallback(
+    async (approvalRequest: ApprovalRequestData | undefined) => {
+      if (!approvalRequest) {
+        return;
+      }
+      const requestId = normalizeRequestId(approvalRequest.requestId);
+      if (requestId == null) {
+        return;
+      }
+
+      const messageIdByRequest = approvalMessageIdMapRef.current.get(
+        String(requestId),
+      );
+      const messageIdByItem = approvalRequest.itemId
+        ? approvalMessageIdMapRef.current.get(approvalRequest.itemId)
+        : null;
+      const messageId = messageIdByRequest || messageIdByItem;
+      if (!messageId) {
+        return;
+      }
+
+      updateApprovalRequest(messageId, {
+        status: "submitting",
+        errorMessage: undefined,
+      });
+
+      const decision = pickApproveDecision(
+        approvalRequest.availableDecisions || [],
+        approvalRequest.proposedExecpolicyAmendment,
+      );
+
+      const approvalDecision =
+        approvalRequest.approvalType === "fileChange"
+          ? (approvalRequest.availableDecisions || []).some((value) => {
+              if (typeof value === "string") {
+                return normalizeEventToken(value) === "acceptforsession";
+              }
+              if (value && typeof value === "object") {
+                const key =
+                  Object.keys(value as Record<string, unknown>)[0] || "";
+                return normalizeEventToken(key) === "acceptforsession";
+              }
+              return false;
+            })
+            ? "acceptForSession"
+            : "accept"
+          : decision;
+
+      try {
+        await relayService.sendJson({
+          jsonrpc: "2.0",
+          id: requestId,
+          result: {
+            decision: approvalDecision,
+          },
+        });
+        updateApprovalRequest(messageId, {
+          status: "approved",
+        });
+      } catch (error) {
+        updateApprovalRequest(messageId, {
+          status: "error",
+          errorMessage:
+            error instanceof Error
+              ? error.message
+              : "Failed to send approval decision.",
+        });
+      }
+    },
+    [updateApprovalRequest],
+  );
+
+  const handleRejectRequest = useCallback(
+    async (approvalRequest: ApprovalRequestData | undefined) => {
+      if (!approvalRequest) {
+        return;
+      }
+      const requestId = normalizeRequestId(approvalRequest.requestId);
+      if (requestId == null) {
+        return;
+      }
+
+      const messageIdByRequest = approvalMessageIdMapRef.current.get(
+        String(requestId),
+      );
+      const messageIdByItem = approvalRequest.itemId
+        ? approvalMessageIdMapRef.current.get(approvalRequest.itemId)
+        : null;
+      const messageId = messageIdByRequest || messageIdByItem;
+      if (!messageId) {
+        return;
+      }
+
+      updateApprovalRequest(messageId, {
+        status: "submitting",
+        errorMessage: undefined,
+      });
+
+      const decision =
+        approvalRequest.approvalType === "fileChange"
+          ? pickFileRejectDecision(approvalRequest.availableDecisions || [])
+          : pickRejectDecision(approvalRequest.availableDecisions || []);
+
+      try {
+        await relayService.sendJson({
+          jsonrpc: "2.0",
+          id: requestId,
+          result: {
+            decision,
+          },
+        });
+        updateApprovalRequest(messageId, {
+          status: "rejected",
+        });
+      } catch (error) {
+        updateApprovalRequest(messageId, {
+          status: "error",
+          errorMessage:
+            error instanceof Error
+              ? error.message
+              : "Failed to send reject decision.",
+        });
+      }
+    },
+    [updateApprovalRequest],
+  );
 
   async function send(text: string) {
     if (!text.trim()) {
@@ -1439,6 +2290,7 @@ export default function ChatScreen() {
 
     const messageId = addUserMessage(text);
     setAssistantMessageId(null);
+    setChatLoading(false);
 
     try {
       const initialized = await ensureCodexInitialized();
@@ -1447,7 +2299,13 @@ export default function ChatScreen() {
       }
 
       const normalizedActiveSessionId =
+        (await ensureActiveThread()) ||
         normalizeThreadReference(activeSessionId);
+      if (!normalizedActiveSessionId) {
+        throw new Error(
+          "Unable to create or resolve a thread for this message.",
+        );
+      }
       const selectedThreadRuntime = normalizedActiveSessionId
         ? threadSelections[normalizedActiveSessionId] || null
         : null;
@@ -1479,8 +2337,12 @@ export default function ChatScreen() {
         collaborationMode,
       };
 
-      if (normalizedActiveSessionId) {
+      const shouldResumeThread =
+        normalizedActiveSessionId &&
+        !pendingFreshThreadIdsRef.current.has(normalizedActiveSessionId);
+      if (shouldResumeThread) {
         await resumeThread(normalizedActiveSessionId);
+        pendingFreshThreadIdsRef.current.delete(normalizedActiveSessionId);
       }
 
       console.log("[mobile][send] payload runtime", {
@@ -1505,12 +2367,29 @@ export default function ChatScreen() {
           null,
         turnId: String(turnStartResult?.turnId || "").trim() || null,
       });
+      const acknowledgedThreadId = normalizeThreadReference(
+        turnStartResult?.threadId || requestParams.threadId,
+      );
+      const optimisticSessionTitle = sanitizeSessionTitle(text);
+      if (acknowledgedThreadId) {
+        void refreshCodexSessions({
+          preserveActiveSessionId: acknowledgedThreadId,
+          preserveActiveSessionTitle: optimisticSessionTitle,
+        }).catch((error) => {
+          console.warn("[mobile][codex/sessions/list] refresh failed", error);
+        });
+        scheduleDelayedSessionRefresh(
+          acknowledgedThreadId,
+          optimisticSessionTitle,
+        );
+      }
       updateMessageDeliveryState(messageId, "sent");
     } catch (error) {
       console.error("[mobile][send] Failed to send message", error);
       updateMessageDeliveryState(messageId, "failed");
     }
   }
+
   return (
     <>
       <ProjectSidebar
@@ -1518,6 +2397,15 @@ export default function ChatScreen() {
         gesturesEnabled={!pairSheetOpen && !isDiffPanelOpen}
         onOpen={() => setSidebarOpen(true)}
         onClose={() => setSidebarOpen(false)}
+        onNewChat={() => {
+          pendingFreshThreadIdsRef.current.clear();
+          approvalMessageIdMapRef.current.clear();
+          approvalRequestStateRef.current.clear();
+          setChatLoading(false);
+          setActiveSession(null);
+          replaceMessages([]);
+          setAssistantMessageId(null);
+        }}
         onProjectSelect={(projectId) => {
           console.log("[mobile][sidebar] project selected", { projectId });
         }}
@@ -1526,8 +2414,7 @@ export default function ChatScreen() {
             projectId,
             sessionId,
           });
-          void resumeThread(sessionId);
-          setSessionLoadTick((value) => value + 1);
+          loadSelectedSession(projectId, sessionId);
         }}
       >
         <SafeAreaView
@@ -1540,6 +2427,8 @@ export default function ChatScreen() {
           <SessionTranscriptLoader
             sessionRef={activeSessionId}
             loadTick={sessionLoadTick}
+            onLoadStateChange={setChatLoading}
+            showLoadingState={chatLoading}
           />
 
           <ChatHeader
@@ -1549,25 +2438,34 @@ export default function ChatScreen() {
             onOpenPairSheet={() => setPairSheetOpen(true)}
           />
 
+          <ChatLoadingOverlay
+            visible={chatLoading}
+            sessionKey={activeSessionId}
+          />
+
           <ScrollView
             style={styles.messages}
             contentContainerStyle={[
               styles.messageContent,
-              renderItems.length === 0 && { flexGrow: 1, justifyContent: 'center' }
+              renderItems.length === 0 && {
+                flexGrow: 1,
+                justifyContent: "center",
+              },
             ]}
           >
             {renderItems.length === 0 ? (
-              <EmptyChatState 
-                projectName={activeProject?.name} 
+              <EmptyChatState
+                projectName={activeProject?.name}
                 projects={projects}
                 onProjectSelect={(projectId) => {
+                  pendingFreshThreadIdsRef.current.clear();
+                  approvalMessageIdMapRef.current.clear();
+                  approvalRequestStateRef.current.clear();
+                  setChatLoading(false);
                   setActiveProject(projectId);
-                  // Optionally find the most recent session for this project
-                  const proj = projects.find(p => p.id === projectId);
-                  if (proj?.sessions.length) {
-                    resumeThread(proj.sessions[0].id);
-                    setSessionLoadTick((v) => v + 1);
-                  }
+                  setActiveSession(null);
+                  replaceMessages([]);
+                  setAssistantMessageId(null);
                 }}
               />
             ) : (
@@ -1596,7 +2494,33 @@ export default function ChatScreen() {
                   );
                 }
 
+                if (item.type === "approval-group") {
+                  const commands: CommandExecutionData[] = item.approvals.map(
+                    (approval) => ({
+                      command: approval.command || "Approval command",
+                      status:
+                        approval.status === "approved"
+                          ? "completed"
+                          : approval.status === "rejected"
+                            ? "stopped"
+                            : "failed",
+                      workingDirectory: approval.workingDirectory,
+                      output: approval.errorMessage,
+                    }),
+                  );
+                  return (
+                    <MessageBubble
+                      key={item.id}
+                      role="system"
+                      text=""
+                      kind="command-execution"
+                      commandExecutions={commands}
+                    />
+                  );
+                }
+
                 const { message } = item;
+                const approvalRequest = message.approvalRequest;
                 return (
                   <MessageBubble
                     key={message.id}
@@ -1607,6 +2531,21 @@ export default function ChatScreen() {
                     deliveryState={message.deliveryState}
                     commandExecution={message.commandExecution}
                     fileChanges={message.fileChanges}
+                    approvalRequest={approvalRequest}
+                    onApprove={
+                      approvalRequest
+                        ? () => {
+                            void handleApproveRequest(approvalRequest);
+                          }
+                        : undefined
+                    }
+                    onReject={
+                      approvalRequest
+                        ? () => {
+                            void handleRejectRequest(approvalRequest);
+                          }
+                        : undefined
+                    }
                   />
                 );
               })

@@ -5,13 +5,19 @@ import { CommandExecutionCard } from "./CommandExecutionCard";
 import { CommandExecutionGroup } from "./CommandExecutionGroup";
 import { DiffBlockView } from "./DiffBlockView";
 import { FileChangeCard } from "./FileChangeCard";
+import { ApprovalCard } from "./ApprovalCard";
+import { ApprovalStatusCard } from "./ApprovalStatusCard";
 import { MarkdownText } from "./MarkdownText";
 import { ThinkingIndicator, ThinkingText } from "./ThinkingIndicator";
 import {
   parseInlineMentions,
   parseMarkdownSegments,
 } from "@/utils/markdown-parser";
-import type { CommandExecutionData, FileChangeData } from "@/store/chat";
+import type {
+  CommandExecutionData,
+  FileChangeData,
+  ApprovalRequestData,
+} from "@/store/chat";
 import { useDiffStore } from "@/store/diff";
 import { useSessionStore } from "@/store/session";
 import { useUiStore } from "@/store/ui";
@@ -22,11 +28,20 @@ type Props = {
   role: "user" | "assistant" | "system";
   text: string;
   streaming?: boolean;
-  kind?: "thinking" | "file-change" | "plan" | "command-execution" | "normal";
+  kind?:
+    | "thinking"
+    | "file-change"
+    | "plan"
+    | "command-execution"
+    | "approval"
+    | "normal";
   deliveryState?: "sending" | "sent" | "failed";
   commandExecution?: CommandExecutionData;
   commandExecutions?: CommandExecutionData[];
   fileChanges?: FileChangeData[];
+  approvalRequest?: ApprovalRequestData;
+  onApprove?: () => void;
+  onReject?: () => void;
 };
 
 export function MessageBubble({
@@ -38,6 +53,9 @@ export function MessageBubble({
   commandExecution,
   commandExecutions,
   fileChanges,
+  approvalRequest,
+  onApprove,
+  onReject,
 }: Props) {
   const colors = useTheme();
   const isUser = role === "user";
@@ -146,6 +164,54 @@ export function MessageBubble({
       );
     }
 
+    if (kind === "approval" && approvalRequest) {
+      const status = approvalRequest.status;
+      const suffix =
+        status === "submitting"
+          ? "(sending approval...)"
+          : status === "approved"
+            ? "(approved)"
+            : status === "rejected"
+              ? "(rejected)"
+              : status === "error"
+                ? "(failed)"
+                : "";
+      const title = suffix ? `Approve command ${suffix}` : "Approve command";
+
+      if (status === "pending" || status === "submitting") {
+        return (
+          <View style={themedStyles.approvalWrapper}>
+            <ApprovalCard
+              title={title}
+              command={approvalRequest.command}
+              workingDirectory={approvalRequest.workingDirectory}
+              filePaths={approvalRequest.filePaths}
+              pending={status === "submitting"}
+              onApprove={onApprove || (() => {})}
+              onReject={onReject || (() => {})}
+            />
+          </View>
+        );
+      }
+
+      return (
+        <View style={themedStyles.systemWrapper}>
+          <ApprovalStatusCard
+            status={
+              status === "approved"
+                ? "approved"
+                : status === "rejected"
+                  ? "rejected"
+                  : "error"
+            }
+            command={approvalRequest.command || "Approval command"}
+            workingDirectory={approvalRequest.workingDirectory}
+            errorMessage={approvalRequest.errorMessage}
+          />
+        </View>
+      );
+    }
+
     if (kind === "plan") {
       return (
         <View style={themedStyles.systemWrapper}>
@@ -247,6 +313,12 @@ const createStyles = (colors: ReturnType<typeof useTheme>) =>
     // System message styles
     systemWrapper: {
       alignItems: "flex-start",
+      marginVertical: 0,
+      paddingHorizontal: 8,
+    },
+    approvalWrapper: {
+      width: "100%",
+      alignItems: "center",
       marginVertical: 0,
       paddingHorizontal: 8,
     },

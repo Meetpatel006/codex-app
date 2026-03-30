@@ -79,6 +79,7 @@ export function ModelSelector() {
       icon={selected.icon}
       options={dynamicOptions}
       onSelect={handleSelect}
+      selectedValue={selected.value}
       direction="up"
       style={{
         backgroundColor: "transparent",
@@ -89,6 +90,7 @@ export function ModelSelector() {
         fontSize: 14,
         fontWeight: "600",
       }}
+      dismissKeyboardOnOpen={false}
     />
   );
 }

@@ -1,4 +1,4 @@
-import { useEffect } from "react";
+import { startTransition, useEffect } from "react";
 
 import { relayService } from "@/services/relay";
 import {
@@ -33,11 +33,15 @@ type SessionTranscriptResult = {
 type SessionTranscriptLoaderProps = {
   sessionRef: string | null;
   loadTick: number;
+  onLoadStateChange?: (loading: boolean) => void;
+  showLoadingState?: boolean;
 };
 
 export function SessionTranscriptLoader({
   sessionRef,
   loadTick,
+  onLoadStateChange,
+  showLoadingState = true,
 }: SessionTranscriptLoaderProps) {
   const replaceMessages = useChatStore((state) => state.replaceMessages);
   const setDiffSnapshot = useDiffStore((state) => state.setDiffSnapshot);
@@ -48,13 +52,20 @@ export function SessionTranscriptLoader({
     async function loadTranscript() {
       const normalizedRef = normalizeThreadReference(sessionRef);
       if (!normalizedRef) {
+        onLoadStateChange?.(false);
         return;
       }
+
+      if (showLoadingState) {
+        onLoadStateChange?.(true);
+      }
+      await waitForNextFrame();
 
       if (!relayService.isSecureReady()) {
         console.log(
           "[mobile][codex/sessions/read] secure channel not ready; skipping transcript load",
         );
+        onLoadStateChange?.(false);
         return;
       }
 
@@ -141,7 +152,9 @@ export function SessionTranscriptLoader({
           }
         });
 
-        replaceMessages(nextMessages);
+        startTransition(() => {
+          replaceMessages(nextMessages);
+        });
         if (normalizedRef) {
           const latestDiff = collectedDiffs[collectedDiffs.length - 1] || "";
           const parsedFiles = latestDiff ? parseUnifiedDiff(latestDiff) : [];
@@ -161,6 +174,12 @@ export function SessionTranscriptLoader({
           `[mobile][codex/sessions/read] failed to load transcript for sessionRef=${normalizedRef}`,
           error,
         );
+      } finally {
+        if (!isCancelled) {
+          await wait(180);
+          await waitForNextFrame();
+          onLoadStateChange?.(false);
+        }
       }
     }
 
@@ -169,7 +188,14 @@ export function SessionTranscriptLoader({
     return () => {
       isCancelled = true;
     };
-  }, [loadTick, replaceMessages, sessionRef, setDiffSnapshot]);
+  }, [
+    loadTick,
+    onLoadStateChange,
+    replaceMessages,
+    sessionRef,
+    setDiffSnapshot,
+    showLoadingState,
+  ]);
 
   return null;
 }
@@ -188,4 +214,16 @@ function normalizeThreadReference(value: string | null | undefined) {
   }
 
   return normalized;
+}
+
+function waitForNextFrame() {
+  return new Promise<void>((resolve) => {
+    requestAnimationFrame(() => resolve());
+  });
+}
+
+function wait(durationMs: number) {
+  return new Promise<void>((resolve) => {
+    setTimeout(resolve, durationMs);
+  });
 }

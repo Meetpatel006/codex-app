@@ -216,11 +216,6 @@ export function FileChangeCard({ changes }: Props) {
                                 -{file.deletions || 0}
                               </ThemedText>
                             </View>
-                            {file.diff ? (
-                              <ThemedText style={styles.previewHint}>
-                                Preview
-                              </ThemedText>
-                            ) : null}
                           </View>
                         </Pressable>
                       </View>
@@ -301,11 +296,6 @@ const createStyles = (colors: ReturnType<typeof useTheme>) =>
       backgroundColor: colors.codeBackground,
       padding: 16,
       gap: 16,
-      shadowColor: "#000",
-      shadowOffset: { width: 0, height: 2 },
-      shadowOpacity: 0.05,
-      shadowRadius: 8,
-      elevation: 2,
     },
     headerRow: {
       flexDirection: "row",
@@ -327,7 +317,9 @@ const createStyles = (colors: ReturnType<typeof useTheme>) =>
     summaryRow: {
       flexDirection: "row",
       alignItems: "center",
-      backgroundColor: colors.backgroundSelected,
+      backgroundColor: colors.codeHeaderBackground,
+      borderWidth: 1,
+      borderColor: colors.codeBorder,
       paddingHorizontal: 8,
       paddingVertical: 4,
       borderRadius: 8,
@@ -385,7 +377,9 @@ const createStyles = (colors: ReturnType<typeof useTheme>) =>
       flexDirection: "row",
       alignItems: "center",
       gap: 8,
-      backgroundColor: colors.backgroundSelected,
+      backgroundColor: colors.codeHeaderBackground,
+      borderWidth: 1,
+      borderColor: colors.codeBorder,
       paddingHorizontal: 6,
       paddingVertical: 2,
       borderRadius: 6,
@@ -440,10 +434,5 @@ const createStyles = (colors: ReturnType<typeof useTheme>) =>
       flexDirection: "row",
       alignItems: "center",
       gap: 8,
-    },
-    previewHint: {
-      color: colors.fileMention,
-      fontSize: 10,
-      fontWeight: "600",
     },
   });

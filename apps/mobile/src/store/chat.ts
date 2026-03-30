@@ -9,6 +9,19 @@ export type CommandExecutionData = {
   output?: string;
 };
 
+export type ApprovalRequestData = {
+  requestId?: string | number;
+  itemId?: string;
+  approvalType?: "command" | "fileChange";
+  command: string;
+  workingDirectory?: string;
+  filePaths?: string[];
+  availableDecisions?: unknown[];
+  proposedExecpolicyAmendment?: unknown;
+  status: "pending" | "submitting" | "approved" | "rejected" | "error";
+  errorMessage?: string;
+};
+
 export type FileChangeData = {
   path: string;
   action: "created" | "edited" | "deleted" | "renamed" | "moved";
@@ -22,10 +35,17 @@ export type ChatMessage = {
   role: "user" | "assistant" | "system";
   text: string;
   isStreaming?: boolean;
-  kind?: "thinking" | "file-change" | "plan" | "command-execution" | "normal";
+  kind?:
+    | "thinking"
+    | "file-change"
+    | "plan"
+    | "command-execution"
+    | "approval"
+    | "normal";
   deliveryState?: "sending" | "sent" | "failed";
   commandExecution?: CommandExecutionData;
   fileChanges?: FileChangeData[];
+  approvalRequest?: ApprovalRequestData;
 };
 
 type ChatStore = {
@@ -51,6 +71,11 @@ type ChatStore = {
   updateCommandExecution: (
     id: string,
     data: Partial<CommandExecutionData>,
+  ) => void;
+  upsertApprovalRequest: (id: string, data: ApprovalRequestData) => void;
+  updateApprovalRequest: (
+    id: string,
+    data: Partial<ApprovalRequestData>,
   ) => void;
   addFileChanges: (changes: FileChangeData[]) => void;
 };
@@ -193,6 +218,61 @@ export const useChatStore = create<ChatStore>((set) => ({
           };
         }
         return message;
+      }),
+    }));
+  },
+  upsertApprovalRequest(id, data) {
+    set((state) => {
+      const index = state.messages.findIndex((message) => message.id === id);
+      if (index === -1) {
+        return {
+          messages: [
+            ...state.messages,
+            {
+              id,
+              role: "system",
+              text: data.command,
+              kind: "approval",
+              approvalRequest: data,
+            },
+          ],
+        };
+      }
+
+      const nextMessages = [...state.messages];
+      const existingApproval = nextMessages[index].approvalRequest || {
+        requestId: data.requestId,
+        command: data.command,
+        status: "pending" as const,
+      };
+      nextMessages[index] = {
+        ...nextMessages[index],
+        role: "system",
+        text: data.command,
+        kind: "approval",
+        approvalRequest: {
+          ...existingApproval,
+          ...data,
+        },
+      };
+
+      return { messages: nextMessages };
+    });
+  },
+  updateApprovalRequest(id, data) {
+    set((state) => ({
+      messages: state.messages.map((message) => {
+        if (message.id !== id || !message.approvalRequest) {
+          return message;
+        }
+
+        return {
+          ...message,
+          approvalRequest: {
+            ...message.approvalRequest,
+            ...data,
+          },
+        };
       }),
     }));
   },

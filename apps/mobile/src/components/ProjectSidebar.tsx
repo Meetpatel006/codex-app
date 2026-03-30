@@ -39,6 +39,7 @@ interface ProjectSidebarProps {
   gesturesEnabled?: boolean;
   onOpen?: () => void;
   onClose: () => void;
+  onNewChat?: () => void;
   onProjectSelect: (projectId: string) => void;
   onSessionSelect: (projectId: string, sessionId: string) => void;
   children?: React.ReactNode;
@@ -51,6 +52,7 @@ export const ProjectSidebar: React.FC<ProjectSidebarProps> = ({
   gesturesEnabled = true,
   onOpen,
   onClose,
+  onNewChat,
   onProjectSelect,
   onSessionSelect,
   children,
@@ -253,6 +255,30 @@ export const ProjectSidebar: React.FC<ProjectSidebarProps> = ({
                       ) : (
                         <SortZAIcon color={colors.text} size={22} />
                       )}
+                    </Pressable>
+
+                    <View style={themedStyles.pillSeparator} />
+
+                    <Pressable
+                      style={({ pressed }) => [
+                        themedStyles.pillButton,
+                        pressed && themedStyles.pressed,
+                      ]}
+                      onPress={() => {
+                        if (onNewChat) {
+                          onNewChat();
+                          onClose();
+                        }
+                      }}
+                    >
+                      <SymbolView
+                        name={{
+                          ios: "square.and.pencil",
+                          android: "edit_square",
+                        }}
+                        tintColor={colors.text}
+                        size={20}
+                      />
                     </Pressable>
 
                     <View style={themedStyles.pillSeparator} />

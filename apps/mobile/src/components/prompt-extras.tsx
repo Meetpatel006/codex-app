@@ -40,6 +40,7 @@ export function LocalSelector({ style }: SelectorProps) {
       icon={<IconComponent size={14} color="#888" />}
       options={LOCAL_OPTIONS}
       onSelect={setSelected}
+      selectedValue={selected.value}
       style={style}
     />
   );
@@ -54,6 +55,7 @@ export function SecuritySelector({ style }: SelectorProps) {
       icon={<ShieldIcon size={14} color="#888" />}
       options={SECURITY_OPTIONS}
       onSelect={setSelected}
+      selectedValue={selected.value}
       style={style}
     />
   );
@@ -68,6 +70,7 @@ export function BranchSelector({ style }: SelectorProps) {
       icon={<BranchIcon size={14} color="#888" />}
       options={BRANCH_OPTIONS}
       onSelect={setSelected}
+      selectedValue={selected.value}
       style={style}
     />
   );

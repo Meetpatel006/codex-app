@@ -27,9 +27,11 @@ export interface DropdownMenuProps {
   icon?: { ios: string; android: string; web: string } | React.ReactNode;
   options?: DropdownOption[];
   onSelect?: (option: DropdownOption) => void;
+  selectedValue?: string;
   style?: ViewStyle;
   labelStyle?: TextStyle;
   direction?: "up" | "down" | "auto";
+  dismissKeyboardOnOpen?: boolean;
 }
 
 export function DropdownMenu({
@@ -37,9 +39,11 @@ export function DropdownMenu({
   icon,
   options = [],
   onSelect,
+  selectedValue,
   style,
   labelStyle,
   direction = "auto",
+  dismissKeyboardOnOpen = true,
 }: DropdownMenuProps) {
   const [isVisible, setIsVisible] = useState(false);
   const [layout, setLayout] = useState({ x: 0, y: 0, width: 0, height: 0 });
@@ -47,14 +51,13 @@ export function DropdownMenu({
   const theme = useTheme();
 
   const handlePress = () => {
-    Keyboard.dismiss();
-
-    setTimeout(() => {
-      containerRef.current?.measure((x, y, width, height, pageX, pageY) => {
-        setLayout({ x: pageX, y: pageY, width, height });
-        setIsVisible(true);
-      });
-    }, 150);
+    if (dismissKeyboardOnOpen) {
+      Keyboard.dismiss();
+    }
+    containerRef.current?.measure((x, y, width, height, pageX, pageY) => {
+      setLayout({ x: pageX, y: pageY, width, height });
+      setIsVisible(true);
+    });
   };
 
   const handleSelect = (option: DropdownOption) => {
@@ -80,6 +83,9 @@ export function DropdownMenu({
     effectiveDirection === "up"
       ? { bottom: windowHeight - layout.y + 4 }
       : { top: layout.y + layout.height + 4 };
+  const activeValue = selectedValue ?? label;
+  const menuWidth = Math.max(layout.width + 28, 212);
+  const menuLeft = Math.max(16, Math.min(layout.x, windowWidth - menuWidth - 16));
 
   return (
     <>
@@ -128,7 +134,7 @@ export function DropdownMenu({
       <Modal
         visible={isVisible}
         transparent={true}
-        animationType="fade"
+        animationType="none"
         onRequestClose={() => setIsVisible(false)}
       >
         <Pressable
@@ -139,54 +145,78 @@ export function DropdownMenu({
             style={[
               styles.menuContainer,
               {
-                backgroundColor: theme.backgroundSelected,
+                backgroundColor:
+                  theme.background === "#000000" ? "#1c1c1d" : "#f7f7f8",
                 ...menuPosition,
-                left: Math.max(16, Math.min(layout.x, windowWidth - 220)),
-                borderColor: theme.backgroundSelected,
+                left: menuLeft,
+                width: menuWidth,
+                borderColor:
+                  theme.background === "#000000"
+                    ? "rgba(255,255,255,0.06)"
+                    : "rgba(0,0,0,0.08)",
                 maxHeight: menuMaxHeight,
               },
             ]}
           >
             <ScrollView bounces={false} showsVerticalScrollIndicator={false}>
-              {options.map((option) => (
-                <Pressable
-                  key={option.value}
-                  style={({ pressed }) => [
-                    styles.optionItem,
-                    pressed && { backgroundColor: theme.backgroundElement },
-                  ]}
-                  onPress={() => handleSelect(option)}
-                >
-                  {option.icon &&
-                    (React.isValidElement(option.icon) ? (
-                      <View style={styles.optionIcon}>{option.icon}</View>
-                    ) : (
+              {options.map((option) => {
+                const isActive =
+                  option.value === activeValue || option.label === activeValue;
+
+                return (
+                  <Pressable
+                    key={option.value}
+                    style={({ pressed }) => [
+                      styles.optionItem,
+                      isActive && {
+                        backgroundColor:
+                          theme.background === "#000000"
+                            ? "#262729"
+                            : theme.backgroundElement,
+                      },
+                      pressed && {
+                        backgroundColor:
+                          theme.background === "#000000"
+                            ? "#2d2f32"
+                            : theme.backgroundSelected,
+                      },
+                    ]}
+                    onPress={() => handleSelect(option)}
+                  >
+                    {option.icon &&
+                      (React.isValidElement(option.icon) ? (
+                        <View style={styles.optionIcon}>{option.icon}</View>
+                      ) : (
+                        <SymbolView
+                          name={option.icon as any}
+                          tintColor={theme.textSecondary}
+                          size={16}
+                          style={styles.optionIcon}
+                        />
+                      ))}
+                    <ThemedText
+                      style={[styles.optionLabel, isActive && styles.optionLabelActive]}
+                      numberOfLines={1}
+                    >
+                      {option.label}
+                    </ThemedText>
+                    {isActive && (
                       <SymbolView
-                        name={option.icon as any}
-                        tintColor={theme.textSecondary}
-                        size={16}
-                        style={styles.optionIcon}
+                        name={
+                          {
+                            ios: "checkmark",
+                            android: "check",
+                            web: "check",
+                          } as any
+                        }
+                        tintColor={theme.text}
+                        size={14}
+                        style={styles.checkIcon}
                       />
-                    ))}
-                  <ThemedText style={styles.optionLabel} numberOfLines={1}>
-                    {option.label}
-                  </ThemedText>
-                  {option.label === label && (
-                    <SymbolView
-                      name={
-                        {
-                          ios: "checkmark",
-                          android: "check",
-                          web: "check",
-                        } as any
-                      }
-                      tintColor={theme.text}
-                      size={14}
-                      style={styles.checkIcon}
-                    />
-                  )}
-                </Pressable>
-              ))}
+                    )}
+                  </Pressable>
+                );
+              })}
             </ScrollView>
           </View>
         </Pressable>
@@ -230,31 +260,35 @@ const styles = StyleSheet.create({
   },
   menuContainer: {
     position: "absolute",
-    minWidth: 200,
-    borderRadius: 14,
-    padding: 6,
-    borderWidth: Platform.OS === "ios" ? 0 : 1,
+    minWidth: 212,
+    borderRadius: 18,
+    padding: 8,
+    borderWidth: 1,
     shadowColor: "#000",
-    shadowOffset: { width: 0, height: 10 },
-    shadowOpacity: 0.3,
-    shadowRadius: 20,
-    elevation: 10,
+    shadowOffset: { width: 0, height: 14 },
+    shadowOpacity: 0.28,
+    shadowRadius: 24,
+    elevation: 14,
   },
   optionItem: {
     flexDirection: "row",
     alignItems: "center",
-    paddingVertical: 10,
+    minHeight: 44,
+    paddingVertical: 9,
     paddingHorizontal: 12,
-    borderRadius: 10,
+    borderRadius: 12,
     gap: 12,
   },
   optionIcon: {
     opacity: 0.8,
   },
   optionLabel: {
-    fontSize: 15,
+    fontSize: 14,
     flex: 1,
     fontWeight: "500",
+  },
+  optionLabelActive: {
+    fontWeight: "600",
   },
   checkIcon: {
     marginLeft: Spacing.one,

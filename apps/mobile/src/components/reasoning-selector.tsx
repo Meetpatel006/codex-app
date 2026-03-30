@@ -90,6 +90,7 @@ export function ReasoningSelector() {
       }}
       options={dynamicOptions}
       onSelect={handleSelect}
+      selectedValue={selected.value}
       direction="up"
       style={{
         backgroundColor: "transparent",
@@ -100,6 +101,7 @@ export function ReasoningSelector() {
         fontSize: 14,
         fontWeight: "600",
       }}
+      dismissKeyboardOnOpen={false}
     />
   );
 }
