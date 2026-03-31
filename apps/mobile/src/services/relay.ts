@@ -1,9 +1,9 @@
 import "react-native-get-random-values";
-import { ed25519 } from "@noble/curves/ed25519";
-import { x25519 } from "@noble/curves/ed25519";
+import { ed25519 } from "@noble/curves/ed25519.js";
+import { x25519 } from "@noble/curves/ed25519.js";
 import { gcm } from "@noble/ciphers/aes.js";
-import { hkdf } from "@noble/hashes/hkdf";
-import { sha256 } from "@noble/hashes/sha256";
+import { hkdf } from "@noble/hashes/hkdf.js";
+import { sha256 } from "@noble/hashes/sha2.js";
 
 import {
   base64ToBytes,
@@ -141,7 +141,7 @@ export class RelayService {
     const identityPublicKey = ed25519.getPublicKey(identityPrivateKey);
     const phoneIdentityPublicKey = bytesToBase64(identityPublicKey);
     const phoneDeviceId = `phone-${bytesToHex(identityPublicKey).slice(0, 16)}`;
-    const phoneEphemeralPrivateKey = x25519.utils.randomPrivateKey();
+    const phoneEphemeralPrivateKey = x25519.utils.randomSecretKey();
     const phoneEphemeralPublicKey = x25519.getPublicKey(
       phoneEphemeralPrivateKey,
     );
@@ -279,19 +279,33 @@ export class RelayService {
             base64ToBytes(macEphemeralPublicKey),
           );
           const salt = sha256(transcript);
-          const infoPrefix = [
-            HANDSHAKE_TAG,
-            sessionId,
-            macDeviceId,
-            phoneDeviceId,
-            String(keyEpoch),
-          ].join("|");
+          const infoPrefix = utf8ToBytes(
+            [
+              HANDSHAKE_TAG,
+              sessionId,
+              macDeviceId,
+              phoneDeviceId,
+              String(keyEpoch),
+            ].join("|"),
+          );
 
           this.phoneToMacKey = await importAesKey(
-            hkdf(sha256, sharedSecret, salt, `${infoPrefix}|phoneToMac`, 32),
+            hkdf(
+              sha256,
+              sharedSecret,
+              salt,
+              concatBytes(infoPrefix, utf8ToBytes("|phoneToMac")),
+              32,
+            ),
           );
           this.macToPhoneKey = await importAesKey(
-            hkdf(sha256, sharedSecret, salt, `${infoPrefix}|macToPhone`, 32),
+            hkdf(
+              sha256,
+              sharedSecret,
+              salt,
+              concatBytes(infoPrefix, utf8ToBytes("|macToPhone")),
+              32,
+            ),
           );
           this.keyEpoch = keyEpoch;
           this.nextOutboundCounter = 0;
@@ -534,7 +548,7 @@ export class RelayService {
     privateKeyHex: string;
     publicKeyHex: string;
   }> {
-    const privateKey = ed25519.utils.randomPrivateKey();
+    const privateKey = ed25519.utils.randomSecretKey();
     const publicKey = ed25519.getPublicKey(privateKey);
     return {
       privateKeyHex: bytesToHex(privateKey),
@@ -810,7 +824,7 @@ function randomBytes(length: number): Uint8Array {
   const output = new Uint8Array(length);
   let offset = 0;
   while (offset < length) {
-    const chunk = ed25519.utils.randomPrivateKey();
+    const chunk = ed25519.utils.randomSecretKey();
     const next = Math.min(chunk.length, length - offset);
     output.set(chunk.slice(0, next), offset);
     offset += next;

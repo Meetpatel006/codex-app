@@ -11,7 +11,10 @@ import { SafeAreaView } from "react-native-safe-area-context";
 import { MessageBubble } from "@/components/MessageBubble";
 import { ChatLoadingOverlay } from "@/components/ChatLoadingOverlay";
 import { SessionTranscriptLoader } from "@/components/SessionTranscriptLoader";
-import { ProjectSidebar } from "@/components/ProjectSidebar";
+import {
+  ProjectSidebar,
+  type SidebarUsageItem,
+} from "@/components/ProjectSidebar";
 import { PromptInput } from "@/components/prompt-input";
 import { ChatHeader } from "@/components/chat-header";
 import { CodeDiffView } from "@/components/code-diff-view";
@@ -167,6 +170,27 @@ type RelayMessageParams = {
     summary?: string;
   };
   msg?: Record<string, unknown> & RelayMessageParams;
+};
+
+type ThreadUsageSnapshot = {
+  threadId: string;
+  tokensUsed: number;
+  tokenLimit: number;
+  updatedAt: number;
+};
+
+type RateLimitWindowSnapshot = {
+  id: string;
+  usedPercent: number;
+  windowMinutes: number | null;
+  resetsAtMs: number | null;
+  label?: string;
+};
+
+type AccountUsageSnapshot = {
+  planType: string | null;
+  windows: RateLimitWindowSnapshot[];
+  updatedAt: number;
 };
 
 function normalizeEventToken(value: unknown) {
@@ -795,6 +819,258 @@ function humanizeProjectName(cwd: string) {
   return parts[parts.length - 1];
 }
 
+const WEEKLY_WINDOW_MINUTES = 7 * 24 * 60;
+const MONTHLY_WINDOW_MINUTES = 30 * 24 * 60;
+
+function readFiniteNumber(value: unknown): number | null {
+  if (typeof value === "number" && Number.isFinite(value)) {
+    return value;
+  }
+  if (typeof value === "string") {
+    const parsed = Number.parseFloat(value);
+    if (Number.isFinite(parsed)) {
+      return parsed;
+    }
+  }
+  return null;
+}
+
+function readTrimmedString(value: unknown): string {
+  return typeof value === "string" ? value.trim() : "";
+}
+
+function clampPercent(value: number) {
+  return Math.max(0, Math.min(100, value));
+}
+
+function normalizePlanType(value: unknown) {
+  const plan = readTrimmedString(value).toLowerCase();
+  return plan || null;
+}
+
+function formatLimitLabel(windowMinutes: number | null, fallbackIndex: number) {
+  if (windowMinutes == null) {
+    return fallbackIndex === 0 ? "Primary limit" : `Limit ${fallbackIndex + 1}`;
+  }
+
+  if (Math.abs(windowMinutes - WEEKLY_WINDOW_MINUTES) <= 120) {
+    return "Weekly limit";
+  }
+
+  if (Math.abs(windowMinutes - MONTHLY_WINDOW_MINUTES) <= 1440) {
+    return "Monthly limit";
+  }
+
+  if (windowMinutes < 60) {
+    return `${windowMinutes}m limit`;
+  }
+
+  if (windowMinutes < 24 * 60) {
+    return `${Math.round(windowMinutes / 60)}h limit`;
+  }
+
+  return `${Math.round(windowMinutes / (24 * 60))}d limit`;
+}
+
+function parseThreadUsageSnapshot(
+  rawPayload: unknown,
+): ThreadUsageSnapshot | null {
+  if (!rawPayload || typeof rawPayload !== "object") {
+    return null;
+  }
+
+  const payload = rawPayload as Record<string, unknown>;
+  const usageCandidate =
+    payload.usage && typeof payload.usage === "object"
+      ? (payload.usage as Record<string, unknown>)
+      : payload;
+
+  const threadId = normalizeThreadReference(
+    readTrimmedString(payload.threadId || payload.thread_id),
+  );
+  const tokenLimit =
+    readFiniteNumber(
+      usageCandidate.tokenLimit ||
+        usageCandidate.token_limit ||
+        usageCandidate.model_context_window ||
+        usageCandidate.modelContextWindow ||
+        usageCandidate.context_window ||
+        usageCandidate.contextWindow,
+    ) ?? 0;
+  const directTokensUsed = readFiniteNumber(
+    usageCandidate.tokensUsed ||
+      usageCandidate.tokens_used ||
+      usageCandidate.total_tokens ||
+      usageCandidate.totalTokens,
+  );
+  const fallbackTokensUsed =
+    (readFiniteNumber(
+      usageCandidate.input_tokens || usageCandidate.inputTokens,
+    ) || 0) +
+    (readFiniteNumber(
+      usageCandidate.output_tokens || usageCandidate.outputTokens,
+    ) || 0) +
+    (readFiniteNumber(
+      usageCandidate.reasoning_output_tokens ||
+        usageCandidate.reasoningOutputTokens,
+    ) || 0);
+  const tokensUsed = directTokensUsed ?? fallbackTokensUsed;
+
+  if (!threadId || tokenLimit <= 0 || tokensUsed < 0) {
+    return null;
+  }
+
+  return {
+    threadId,
+    tokenLimit,
+    tokensUsed: Math.min(tokensUsed, tokenLimit),
+    updatedAt: Date.now(),
+  };
+}
+
+function parseRateLimitWindow(
+  rawWindow: unknown,
+  fallbackId: string,
+): RateLimitWindowSnapshot | null {
+  if (!rawWindow || typeof rawWindow !== "object") {
+    return null;
+  }
+
+  const window = rawWindow as Record<string, unknown>;
+  const usedPercent = readFiniteNumber(
+    window.used_percent || window.usedPercent,
+  );
+  if (usedPercent == null) {
+    return null;
+  }
+
+  const windowMinutesRaw = readFiniteNumber(
+    window.windowDurationMins ||
+      window.window_duration_mins ||
+      window.window_minutes ||
+      window.windowMinutes,
+  );
+  const windowMinutes =
+    windowMinutesRaw != null ? Math.max(0, Math.trunc(windowMinutesRaw)) : null;
+  const resetsAtRaw = readFiniteNumber(window.resets_at || window.resetsAt);
+  const resetsAtMs =
+    resetsAtRaw == null
+      ? null
+      : resetsAtRaw > 1_000_000_000_000
+        ? Math.trunc(resetsAtRaw)
+        : Math.trunc(resetsAtRaw * 1000);
+
+  return {
+    id: fallbackId,
+    usedPercent: clampPercent(usedPercent),
+    windowMinutes,
+    resetsAtMs,
+  };
+}
+
+function parseAccountUsageSnapshot(
+  rawPayload: unknown,
+): AccountUsageSnapshot | null {
+  if (!rawPayload || typeof rawPayload !== "object") {
+    return null;
+  }
+
+  const payload = rawPayload as Record<string, unknown>;
+  const snapshotCandidate =
+    (payload.rateLimits as Record<string, unknown>) ||
+    (payload.rate_limits as Record<string, unknown>) ||
+    (payload.snapshot as Record<string, unknown>) ||
+    payload;
+
+  const primary = parseRateLimitWindow(
+    snapshotCandidate.primary,
+    "primary-window",
+  );
+  const secondary = parseRateLimitWindow(
+    snapshotCandidate.secondary,
+    "secondary-window",
+  );
+  const windows = [primary, secondary].filter(
+    (item): item is RateLimitWindowSnapshot => !!item,
+  );
+
+  if (windows.length === 0) {
+    return null;
+  }
+
+  return {
+    planType: normalizePlanType(
+      snapshotCandidate.plan_type ||
+        snapshotCandidate.planType ||
+        payload.plan_type ||
+        payload.planType,
+    ),
+    windows,
+    updatedAt: Date.now(),
+  };
+}
+
+function isFreeOrGoPlan(planType: string | null) {
+  if (!planType) {
+    return false;
+  }
+  return planType === "free" || planType === "go";
+}
+
+function buildSidebarUsageItems(params: {
+  accountUsage: AccountUsageSnapshot | null;
+  threadUsage: ThreadUsageSnapshot | null;
+}): SidebarUsageItem[] {
+  const { accountUsage, threadUsage } = params;
+
+  if (accountUsage && accountUsage.windows.length > 0) {
+    const sortedWindows = [...accountUsage.windows].sort((left, right) => {
+      const leftMinutes = left.windowMinutes ?? Number.MAX_SAFE_INTEGER;
+      const rightMinutes = right.windowMinutes ?? Number.MAX_SAFE_INTEGER;
+      return leftMinutes - rightMinutes;
+    });
+
+    const windowsToUse = isFreeOrGoPlan(accountUsage.planType)
+      ? [
+          sortedWindows.reduce((best, next) => {
+            const bestDistance = Math.abs(
+              (best.windowMinutes ?? WEEKLY_WINDOW_MINUTES) -
+                WEEKLY_WINDOW_MINUTES,
+            );
+            const nextDistance = Math.abs(
+              (next.windowMinutes ?? WEEKLY_WINDOW_MINUTES) -
+                WEEKLY_WINDOW_MINUTES,
+            );
+            return nextDistance < bestDistance ? next : best;
+          }),
+        ]
+      : sortedWindows.slice(0, 2);
+
+    return windowsToUse.map((window, index) => ({
+      id: window.id,
+      label: formatLimitLabel(window.windowMinutes, index),
+      percent: window.usedPercent,
+      valueText: `${Math.round(window.usedPercent)}%`,
+    }));
+  }
+
+  if (threadUsage && threadUsage.tokenLimit > 0) {
+    const percent = clampPercent(
+      (threadUsage.tokensUsed / threadUsage.tokenLimit) * 100,
+    );
+    return [
+      {
+        id: "context-window",
+        label: "Context window",
+        percent,
+        valueText: `${Math.round(percent)}%`,
+      },
+    ];
+  }
+
+  return [];
+}
+
 export default function ChatScreen() {
   const theme = useTheme();
   const [assistantMessageId, setAssistantMessageId] = useState<string | null>(
@@ -843,6 +1119,13 @@ export default function ChatScreen() {
   const [commitChangedFiles, setCommitChangedFiles] = useState(0);
   const [commitAdditions, setCommitAdditions] = useState(0);
   const [commitDeletions, setCommitDeletions] = useState(0);
+  const [threadUsageByThreadId, setThreadUsageByThreadId] = useState<
+    Record<string, ThreadUsageSnapshot>
+  >({});
+  const [accountUsage, setAccountUsage] = useState<AccountUsageSnapshot | null>(
+    null,
+  );
+  const [usageHintText, setUsageHintText] = useState("Refreshing usage...");
   const setActiveDiffSession = useDiffStore((state) => state.setActiveSession);
   const setDiffSnapshot = useDiffStore((state) => state.setDiffSnapshot);
   const isDiffPanelOpen = useUiStore((state) => state.isDiffPanelOpen);
@@ -1013,6 +1296,18 @@ export default function ChatScreen() {
   const activeProject =
     projects.find((project) => project.id === activeProjectId) || null;
   const gitCwd = getGitCwd(activeProject?.description);
+  const normalizedActiveSessionId = normalizeThreadReference(activeSessionId);
+  const activeThreadUsage = normalizedActiveSessionId
+    ? threadUsageByThreadId[normalizedActiveSessionId] || null
+    : null;
+  const sidebarUsageItems = useMemo(
+    () =>
+      buildSidebarUsageItems({
+        accountUsage,
+        threadUsage: activeThreadUsage,
+      }),
+    [accountUsage, activeThreadUsage],
+  );
 
   useEffect(() => {
     void loadSession();
@@ -1296,6 +1591,80 @@ export default function ChatScreen() {
     [replaceProjects],
   );
 
+  const refreshThreadUsage = useCallback(async (threadId?: string | null) => {
+    const normalizedThreadId = normalizeThreadReference(threadId);
+    if (!normalizedThreadId || !relayService.isSecureReady()) {
+      return false;
+    }
+
+    try {
+      const result = await relayService.requestJson<unknown>(
+        "thread/contextWindow/read",
+        {
+          threadId: normalizedThreadId,
+        },
+        10_000,
+      );
+      const parsed = parseThreadUsageSnapshot(result);
+      if (!parsed) {
+        return false;
+      }
+      setThreadUsageByThreadId((current) => ({
+        ...current,
+        [parsed.threadId]: parsed,
+      }));
+      setUsageHintText("Refreshes automatically");
+      return true;
+    } catch (error) {
+      console.warn("[mobile][thread/contextWindow/read] failed", {
+        threadId: normalizedThreadId,
+        error,
+      });
+      return false;
+    }
+  }, []);
+
+  const refreshAccountUsage = useCallback(async () => {
+    if (!relayService.isSecureReady()) {
+      return false;
+    }
+
+    try {
+      const result = await relayService.requestJson<unknown>(
+        "account/rateLimits/read",
+        {},
+        10_000,
+      );
+      const parsed = parseAccountUsageSnapshot(result);
+      if (!parsed) {
+        return false;
+      }
+      setAccountUsage(parsed);
+      setUsageHintText("Refreshes automatically");
+      return true;
+    } catch (error) {
+      console.warn("[mobile][account/rateLimits/read] failed", error);
+      return false;
+    }
+  }, []);
+
+  const refreshUsageStatus = useCallback(
+    async (threadId?: string | null) => {
+      setUsageHintText("Refreshing usage...");
+      const results = await Promise.allSettled([
+        refreshAccountUsage(),
+        refreshThreadUsage(threadId),
+      ]);
+      const hasFreshData = results.some(
+        (result) => result.status === "fulfilled" && result.value,
+      );
+      if (!hasFreshData) {
+        setUsageHintText("Live usage may take a moment");
+      }
+    },
+    [refreshAccountUsage, refreshThreadUsage],
+  );
+
   const scheduleDelayedSessionRefresh = useCallback(
     (sessionId: string | null | undefined, sessionTitle?: string | null) => {
       const normalizedSessionId = normalizeThreadReference(sessionId);
@@ -1485,6 +1854,10 @@ export default function ChatScreen() {
           return;
         }
 
+        void refreshUsageStatus(activeSessionId).catch((error) => {
+          console.warn("[mobile][usage/refresh] initial refresh failed", error);
+        });
+
         void fetchCodexModelOptions().catch((error) => {
           console.warn("[mobile][model/list] fetch failed", error);
         });
@@ -1520,6 +1893,28 @@ export default function ChatScreen() {
             console.warn("[mobile][codex/sessions/list] refresh failed", error);
           });
           scheduleDelayedSessionRefresh(startedThreadId);
+        }
+      }
+
+      if (message.method === "thread/tokenUsage/updated") {
+        const parsed = parseThreadUsageSnapshot(params);
+        if (parsed) {
+          setThreadUsageByThreadId((current) => ({
+            ...current,
+            [parsed.threadId]: parsed,
+          }));
+          setUsageHintText("Refreshes automatically");
+        }
+      }
+
+      if (
+        message.method === "account/rateLimits/updated" ||
+        message.method === "account/updated"
+      ) {
+        const parsed = parseAccountUsageSnapshot(params);
+        if (parsed) {
+          setAccountUsage(parsed);
+          setUsageHintText("Refreshes automatically");
         }
       }
 
@@ -2022,10 +2417,20 @@ export default function ChatScreen() {
     ensureCodexInitialized,
     fetchCodexModelOptions,
     fetchCodexModelOptionsFallback,
+    refreshUsageStatus,
     scheduleDelayedSessionRefresh,
     setActiveSession,
     setDiffSnapshot,
   ]);
+
+  useEffect(() => {
+    if (!relayService.isSecureReady()) {
+      return;
+    }
+    void refreshUsageStatus(activeSessionId).catch((error) => {
+      console.warn("[mobile][usage/refresh] session refresh failed", error);
+    });
+  }, [activeSessionId, refreshUsageStatus]);
 
   useEffect(() => {
     if (!pairing) {
@@ -2395,6 +2800,9 @@ export default function ChatScreen() {
       <ProjectSidebar
         isOpen={sidebarOpen}
         gesturesEnabled={!pairSheetOpen && !isDiffPanelOpen}
+        usageItems={sidebarUsageItems}
+        usageHint={usageHintText}
+        usageEmptyText="Usage data unavailable"
         onOpen={() => setSidebarOpen(true)}
         onClose={() => setSidebarOpen(false)}
         onNewChat={() => {

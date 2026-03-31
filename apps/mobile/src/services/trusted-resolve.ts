@@ -1,5 +1,5 @@
 import "react-native-get-random-values";
-import { ed25519 } from "@noble/curves/ed25519";
+import { ed25519 } from "@noble/curves/ed25519.js";
 
 import { base64ToBytes, bytesToBase64, bytesToHex, hexToBytes } from "./crypto";
 

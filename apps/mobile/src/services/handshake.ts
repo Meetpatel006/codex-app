@@ -1,6 +1,7 @@
-import { ed25519, x25519 } from "@noble/curves/ed25519";
-import { hkdf } from "@noble/hashes/hkdf";
-import { sha256 } from "@noble/hashes/sha256";
+import { ed25519, x25519 } from "@noble/curves/ed25519.js";
+import { hkdf } from "@noble/hashes/hkdf.js";
+import { sha256 } from "@noble/hashes/sha2.js";
+import { utf8ToBytes } from "@noble/hashes/utils.js";
 
 import { bytesToHex, hexToBytes, importAesKey } from "./crypto";
 
@@ -19,10 +20,12 @@ export type HandshakeState = {
   ephemeralPublicKey: Uint8Array;
 };
 
-export function createHandshakeState(identityPrivateKeyHex: string): HandshakeState {
+export function createHandshakeState(
+  identityPrivateKeyHex: string,
+): HandshakeState {
   const identityPrivateKey = hexToBytes(identityPrivateKeyHex);
   const identityPublicKey = ed25519.getPublicKey(identityPrivateKey);
-  const ephemeralPrivateKey = x25519.utils.randomPrivateKey();
+  const ephemeralPrivateKey = x25519.utils.randomSecretKey();
   const ephemeralPublicKey = x25519.getPublicKey(ephemeralPrivateKey);
 
   return {
@@ -34,7 +37,10 @@ export function createHandshakeState(identityPrivateKeyHex: string): HandshakeSt
 }
 
 export function buildHello(state: HandshakeState): HandshakeHello {
-  const signature = ed25519.sign(state.ephemeralPublicKey, state.identityPrivateKey);
+  const signature = ed25519.sign(
+    state.ephemeralPublicKey,
+    state.identityPrivateKey,
+  );
   return {
     type: "secure-control",
     action: "hello",
@@ -62,14 +68,29 @@ export async function deriveSessionKey(params: {
   localRole: "iphone" | "mac";
 }): Promise<CryptoKey> {
   const remoteEphemeralPub = hexToBytes(params.remoteEphemeralPubHex);
-  const sharedSecret = x25519.getSharedSecret(params.localEphemeralPriv, remoteEphemeralPub);
+  const sharedSecret = x25519.getSharedSecret(
+    params.localEphemeralPriv,
+    remoteEphemeralPub,
+  );
 
-  const left = params.localRole === "iphone" ? params.localEphemeralPub : remoteEphemeralPub;
-  const right = params.localRole === "iphone" ? remoteEphemeralPub : params.localEphemeralPub;
+  const left =
+    params.localRole === "iphone"
+      ? params.localEphemeralPub
+      : remoteEphemeralPub;
+  const right =
+    params.localRole === "iphone"
+      ? remoteEphemeralPub
+      : params.localEphemeralPub;
   const salt = new Uint8Array(left.length + right.length);
   salt.set(left, 0);
   salt.set(right, left.length);
 
-  const rawKey = hkdf(sha256, sharedSecret, salt, "remodex-session-v1", 32);
+  const rawKey = hkdf(
+    sha256,
+    sharedSecret,
+    salt,
+    utf8ToBytes("remodex-session-v1"),
+    32,
+  );
   return importAesKey(rawKey);
 }

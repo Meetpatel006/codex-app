@@ -40,10 +40,20 @@ interface ProjectSidebarProps {
   onNewChat?: () => void;
   onProjectSelect: (projectId: string) => void;
   onSessionSelect: (projectId: string, sessionId: string) => void;
+  usageItems?: SidebarUsageItem[];
+  usageHint?: string;
+  usageEmptyText?: string;
   children?: React.ReactNode;
 }
 
 type ExpandedState = Record<string, boolean>;
+
+export type SidebarUsageItem = {
+  id: string;
+  label: string;
+  percent: number;
+  valueText?: string;
+};
 
 export const ProjectSidebar: React.FC<ProjectSidebarProps> = ({
   isOpen,
@@ -53,6 +63,9 @@ export const ProjectSidebar: React.FC<ProjectSidebarProps> = ({
   onNewChat,
   onProjectSelect,
   onSessionSelect,
+  usageItems,
+  usageHint,
+  usageEmptyText,
   children,
 }) => {
   const colors = useTheme();
@@ -195,8 +208,26 @@ export const ProjectSidebar: React.FC<ProjectSidebarProps> = ({
     });
   }, [projects, sortDirection]);
 
-  const monthlyUsage = 75;
-  const weeklyUsage = 40;
+  const normalizedUsageItems = useMemo(() => {
+    if (!Array.isArray(usageItems) || usageItems.length === 0) {
+      return [];
+    }
+
+    return usageItems
+      .map((item) => {
+        const normalizedPercent = Number.isFinite(item.percent)
+          ? Math.max(0, Math.min(100, item.percent))
+          : 0;
+        const roundedPercent = Math.round(normalizedPercent);
+        return {
+          ...item,
+          percent: normalizedPercent,
+          valueText: item.valueText || `${roundedPercent}%`,
+        };
+      })
+      .slice(0, 3);
+  }, [usageItems]);
+
   const isDark = colors.background === "#000000";
 
   const themedStyles = useMemo(
@@ -442,49 +473,38 @@ export const ProjectSidebar: React.FC<ProjectSidebarProps> = ({
                   <View style={themedStyles.usageHeader}>
                     <Text style={themedStyles.usageTitle}>Usage</Text>
                     <Text style={themedStyles.usageHint}>
-                      Refreshes automatically
+                      {usageHint || "Refreshes automatically"}
                     </Text>
                   </View>
 
-                  <View style={themedStyles.limitsContainer}>
-                    <View style={themedStyles.limitItem}>
-                      <View style={themedStyles.limitHeader}>
-                        <Text style={themedStyles.limitLabel}>
-                          Monthly limit
-                        </Text>
-                        <Text style={themedStyles.limitValue}>
-                          {monthlyUsage}%
-                        </Text>
-                      </View>
-                      <View style={themedStyles.progressBarBg}>
-                        <View
-                          style={[
-                            themedStyles.progressBarFill,
-                            { width: `${monthlyUsage}%` },
-                          ]}
-                        />
-                      </View>
+                  {normalizedUsageItems.length > 0 ? (
+                    <View style={themedStyles.limitsContainer}>
+                      {normalizedUsageItems.map((item) => (
+                        <View key={item.id} style={themedStyles.limitItem}>
+                          <View style={themedStyles.limitHeader}>
+                            <Text style={themedStyles.limitLabel}>
+                              {item.label}
+                            </Text>
+                            <Text style={themedStyles.limitValue}>
+                              {item.valueText}
+                            </Text>
+                          </View>
+                          <View style={themedStyles.progressBarBg}>
+                            <View
+                              style={[
+                                themedStyles.progressBarFill,
+                                { width: `${item.percent}%` },
+                              ]}
+                            />
+                          </View>
+                        </View>
+                      ))}
                     </View>
-
-                    <View style={themedStyles.limitItem}>
-                      <View style={themedStyles.limitHeader}>
-                        <Text style={themedStyles.limitLabel}>
-                          Weekly limit
-                        </Text>
-                        <Text style={themedStyles.limitValue}>
-                          {weeklyUsage}%
-                        </Text>
-                      </View>
-                      <View style={themedStyles.progressBarBg}>
-                        <View
-                          style={[
-                            themedStyles.progressBarFill,
-                            { width: `${weeklyUsage}%` },
-                          ]}
-                        />
-                      </View>
-                    </View>
-                  </View>
+                  ) : (
+                    <Text style={themedStyles.usageEmptyText}>
+                      {usageEmptyText || "Usage data unavailable"}
+                    </Text>
+                  )}
                 </View>
               </LinearGradient>
             </View>
@@ -785,6 +805,11 @@ const createStyles = (colors: ReturnType<typeof useTheme>, isDark: boolean) =>
     },
     usageHint: {
       fontSize: 12,
+      color: colors.textSecondary,
+      fontWeight: "500",
+    },
+    usageEmptyText: {
+      fontSize: 13,
       color: colors.textSecondary,
       fontWeight: "500",
     },
