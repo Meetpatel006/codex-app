@@ -19,9 +19,36 @@ type MarkdownToken =
   | { type: "bold"; content: string }
   | { type: "italic"; content: string }
   | { type: "code"; content: string }
-  | { type: "link"; content: string; href: string }
+  | {
+      type: "link";
+      content: string;
+      href: string;
+      renderAsPill?: boolean;
+    }
   | { type: "file"; content: string }
   | { type: "skill"; content: string };
+
+function unwrapInlineCode(content: string): {
+  content: string;
+  isCodeWrapped: boolean;
+} {
+  const match = content.match(/^`([^`]+)`$/);
+  if (!match) {
+    return { content, isCodeWrapped: false };
+  }
+
+  return { content: match[1], isCodeWrapped: true };
+}
+
+function looksLikeFilePath(content: string): boolean {
+  if (!content || !/[\\/]/.test(content)) {
+    return false;
+  }
+
+  return (
+    /\.[a-z0-9]{1,8}(?::\d+(?::\d+)?)?$/i.test(content) || /^[.~]/.test(content)
+  );
+}
 
 type MarkdownBlock =
   | { type: "paragraph"; content: string }
@@ -62,10 +89,14 @@ function parseMarkdownFormatting(text: string): MarkdownToken[] {
       const linkMatch = remaining.match(/^\[([^\]]+)\]\(([^)]+)\)/);
       if (linkMatch) {
         flushPlainText();
+        const parsedContent = unwrapInlineCode(linkMatch[1]);
         tokens.push({
           type: "link",
-          content: linkMatch[1],
+          content: parsedContent.content,
           href: linkMatch[2].trim(),
+          renderAsPill:
+            parsedContent.isCodeWrapped ||
+            looksLikeFilePath(parsedContent.content),
         });
         remaining = remaining.slice(linkMatch[0].length);
         continue;
@@ -303,7 +334,10 @@ export function MarkdownText({ content }: Props) {
           return (
             <View
               key={index}
-              style={[themedStyles.block, isLastBlock && themedStyles.lastBlock]}
+              style={[
+                themedStyles.block,
+                isLastBlock && themedStyles.lastBlock,
+              ]}
             >
               {renderInlineTokens(
                 parseMarkdownFormatting(block.content),
@@ -435,17 +469,15 @@ function renderToken(
 ): React.ReactNode | React.ReactNode[] {
   switch (token.type) {
     case "bold":
-      return renderWrappedTextSegments(
-        token.content,
-        index,
-        [textStyle, styles.bold],
-      );
+      return renderWrappedTextSegments(token.content, index, [
+        textStyle,
+        styles.bold,
+      ]);
     case "italic":
-      return renderWrappedTextSegments(
-        token.content,
-        index,
-        [textStyle, styles.italic],
-      );
+      return renderWrappedTextSegments(token.content, index, [
+        textStyle,
+        styles.italic,
+      ]);
     case "code":
       if (token.content.length > 28) {
         return (
@@ -462,10 +494,26 @@ function renderToken(
 
       return (
         <View key={`code-${index}`} style={styles.inlineCode}>
-          <Text style={[textStyle, styles.inlineCodeText]}>{token.content}</Text>
+          <Text style={[textStyle, styles.inlineCodeText]}>
+            {token.content}
+          </Text>
         </View>
       );
     case "link":
+      if (token.renderAsPill) {
+        return renderPathLikeLinkSegments(
+          token.content,
+          index,
+          styles,
+          [textStyle, styles.inlineCodeText, styles.linkPillText],
+          () => {
+            if (/^https?:\/\//i.test(token.href)) {
+              void Linking.openURL(token.href);
+            }
+          },
+        );
+      }
+
       return renderWrappedTextSegments(
         token.content,
         index,
@@ -477,47 +525,94 @@ function renderToken(
         },
       );
     case "file":
-      return renderWrappedTextSegments(
-        token.content,
-        index,
-        [textStyle, styles.fileMention],
-      );
+      return renderWrappedTextSegments(token.content, index, [
+        textStyle,
+        styles.fileMention,
+      ]);
     case "skill":
-      return renderWrappedTextSegments(
-        token.content,
-        index,
-        [textStyle, styles.skillMention],
-      );
+      return renderWrappedTextSegments(token.content, index, [
+        textStyle,
+        styles.skillMention,
+      ]);
     default:
-      return renderWrappedTextSegments(
-        token.content,
-        index,
-        [textStyle, styles.textInline],
-      );
+      return renderWrappedTextSegments(token.content, index, [
+        textStyle,
+        styles.textInline,
+      ]);
   }
 }
 
 function wrapInlineCode(content: string, maxLineLength: number): string {
-  const chunks = content.split(/(\s+)/);
-  const lines: string[] = [];
-  let current = "";
+  const breakChars = [" ", "/", "\\", "-", "_", ".", ":"];
+  const output: string[] = [];
 
-  for (const chunk of chunks) {
-    const next = current + chunk;
-    if (next.length <= maxLineLength || current.trim().length === 0) {
-      current = next;
+  for (const rawLine of content.split("\n")) {
+    if (!rawLine) {
+      output.push("");
       continue;
     }
 
-    lines.push(current.trimEnd());
-    current = chunk.trimStart();
+    let remaining = rawLine;
+    while (remaining.length > 0) {
+      if (remaining.length <= maxLineLength) {
+        output.push(remaining);
+        break;
+      }
+
+      const window = remaining.slice(0, maxLineLength + 1);
+      let splitIndex = -1;
+      for (const char of breakChars) {
+        splitIndex = Math.max(splitIndex, window.lastIndexOf(char));
+      }
+
+      if (splitIndex <= 0) {
+        splitIndex = maxLineLength;
+      } else {
+        splitIndex += 1;
+      }
+
+      output.push(remaining.slice(0, splitIndex).trimEnd());
+      remaining = remaining.slice(splitIndex).trimStart();
+    }
   }
 
-  if (current.length > 0) {
-    lines.push(current.trimEnd());
+  return output.join("\n");
+}
+
+function wrapPathPill(content: string, maxLineLength: number): string {
+  const output: string[] = [];
+
+  for (const rawLine of content.split("\n")) {
+    if (!rawLine) {
+      output.push("");
+      continue;
+    }
+
+    let remaining = rawLine;
+    while (remaining.length > 0) {
+      if (remaining.length <= maxLineLength) {
+        output.push(remaining);
+        break;
+      }
+
+      const window = remaining.slice(0, maxLineLength + 1);
+      const splitIndex = Math.max(
+        window.lastIndexOf("/"),
+        window.lastIndexOf("\\"),
+      );
+
+      if (splitIndex > 0) {
+        output.push(remaining.slice(0, splitIndex + 1).trimEnd());
+        remaining = remaining.slice(splitIndex + 1).trimStart();
+        continue;
+      }
+
+      output.push(remaining.slice(0, maxLineLength));
+      remaining = remaining.slice(maxLineLength).trimStart();
+    }
   }
 
-  return lines.join("\n");
+  return output.join("\n");
 }
 
 function renderWrappedTextSegments(
@@ -551,6 +646,28 @@ function renderWrappedTextSegments(
       </Text>
     );
   });
+}
+
+function renderPathLikeLinkSegments(
+  content: string,
+  keyPrefix: number,
+  styles: ReturnType<typeof createStyles>,
+  textStyle: StyleProp<TextStyle>,
+  onPress?: () => void,
+) {
+  return (
+    <View
+      key={`${keyPrefix}-path-pill`}
+      style={[styles.inlineCode, styles.inlineCodeTextPill, styles.pathPill]}
+    >
+      <Text
+        style={[textStyle, styles.inlineCodeText, styles.linkPillText]}
+        onPress={onPress}
+      >
+        {wrapPathPill(content, 28)}
+      </Text>
+    </View>
+  );
 }
 
 const createStyles = (colors: ReturnType<typeof useTheme>) =>
@@ -689,10 +806,28 @@ const createStyles = (colors: ReturnType<typeof useTheme>) =>
       textAlignVertical: "center",
       flexShrink: 1,
     },
+    inlineCodeTextPill: {
+      backgroundColor: colors.codeHeaderBackground,
+      borderRadius: 999,
+    },
+    pathPill: {
+      borderRadius: 18,
+      alignSelf: "flex-start",
+      maxWidth: "100%",
+      minWidth: 0,
+      paddingHorizontal: 7,
+      paddingVertical: 4,
+      marginHorizontal: 1,
+      marginVertical: 2,
+    },
     link: {
       color: colors.linkColor,
       textDecorationLine: "underline",
       textDecorationColor: colors.linkColor,
+    },
+    linkPillText: {
+      color: colors.linkColor,
+      textDecorationLine: "none",
     },
     fileMention: {
       color: colors.fileMention,

@@ -2606,7 +2606,7 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   messageContent: {
-    paddingHorizontal: 10,
+    paddingHorizontal: 16,
     paddingTop: 56,
     paddingBottom: 200,
     gap: 20,

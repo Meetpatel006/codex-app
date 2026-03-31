@@ -12,10 +12,7 @@ import { SafeAreaView } from "react-native-safe-area-context";
 import { LinearGradient } from "expo-linear-gradient";
 import { SymbolView } from "expo-symbols";
 import { useSessionStore } from "@/store/session";
-import {
-  Gesture,
-  GestureDetector,
-} from "react-native-gesture-handler";
+import { Gesture, GestureDetector } from "react-native-gesture-handler";
 import Animated, {
   useSharedValue,
   useAnimatedStyle,
@@ -30,6 +27,7 @@ import { useTheme } from "@/hooks/use-theme";
 import {
   FolderIcon,
   FolderOpenIcon,
+  SettingsIcon,
   SortAZIcon,
   SortZAIcon,
 } from "./icons/Icon";
@@ -197,7 +195,14 @@ export const ProjectSidebar: React.FC<ProjectSidebarProps> = ({
     });
   }, [projects, sortDirection]);
 
-  const themedStyles = useMemo(() => createStyles(colors), [colors]);
+  const monthlyUsage = 75;
+  const weeklyUsage = 40;
+  const isDark = colors.background === "#000000";
+
+  const themedStyles = useMemo(
+    () => createStyles(colors, isDark),
+    [colors, isDark],
+  );
 
   const overlayContent = (
     <>
@@ -238,7 +243,7 @@ export const ProjectSidebar: React.FC<ProjectSidebarProps> = ({
               style={themedStyles.headerBlock}
             >
               <View style={themedStyles.header}>
-                <Text style={themedStyles.logoText}>Threads</Text>
+                <Text style={themedStyles.logoText}>Projects</Text>
                 <View style={themedStyles.headerActions}>
                   <View style={themedStyles.actionPill}>
                     <Pressable
@@ -277,7 +282,7 @@ export const ProjectSidebar: React.FC<ProjectSidebarProps> = ({
                           android: "edit_square",
                         }}
                         tintColor={colors.text}
-                        size={20}
+                        size={22}
                       />
                     </Pressable>
 
@@ -288,24 +293,20 @@ export const ProjectSidebar: React.FC<ProjectSidebarProps> = ({
                         themedStyles.pillButton,
                         pressed && themedStyles.pressed,
                       ]}
-                      onPress={() => {
-                      }}
+                      onPress={() => {}}
                     >
-                      <SymbolView
-                        name={{
-                          ios: "gearshape",
-                          android: "settings",
-                        }}
-                        tintColor={colors.text}
-                        size={22}
-                      />
+                      <SettingsIcon color={colors.text} size={22} />
                     </Pressable>
                   </View>
                 </View>
               </View>
             </LinearGradient>
 
-            <ScrollView contentContainerStyle={themedStyles.scrollContent}>
+            <ScrollView
+              style={themedStyles.projectScroll}
+              contentContainerStyle={themedStyles.scrollContent}
+              showsVerticalScrollIndicator={false}
+            >
               {sortedProjects.map((project) => {
                 const expanded = isProjectExpanded(
                   expandedByProject,
@@ -314,7 +315,7 @@ export const ProjectSidebar: React.FC<ProjectSidebarProps> = ({
                 );
 
                 return (
-                  <View key={project.id}>
+                  <View key={project.id} style={themedStyles.projectItemWrap}>
                     <Pressable
                       onPress={() => {
                         setActiveProject(project.id);
@@ -323,69 +324,107 @@ export const ProjectSidebar: React.FC<ProjectSidebarProps> = ({
                       }}
                       style={({ pressed }) => [
                         themedStyles.menuItem,
-                        pressed && {
-                          backgroundColor: colors.backgroundElement,
-                        },
+                        activeProjectId === project.id &&
+                          themedStyles.menuItemActive,
+                        expanded && themedStyles.menuItemExpanded,
+                        pressed && themedStyles.menuItemPressed,
                       ]}
                     >
-                      {expanded ? (
-                        <FolderOpenIcon
-                          size={20}
-                          color={colors.textSecondary}
+                      <View
+                        style={[
+                          themedStyles.folderShell,
+                          expanded && themedStyles.folderShellExpanded,
+                        ]}
+                      >
+                        {expanded ? (
+                          <FolderOpenIcon
+                            size={18}
+                            color={
+                              activeProjectId === project.id
+                                ? colors.text
+                                : colors.textSecondary
+                            }
+                          />
+                        ) : (
+                          <FolderIcon
+                            size={18}
+                            color={
+                              activeProjectId === project.id
+                                ? colors.text
+                                : colors.textSecondary
+                            }
+                          />
+                        )}
+                      </View>
+
+                      <View style={themedStyles.menuItemMeta}>
+                        <Text
+                          style={themedStyles.menuItemText}
+                          numberOfLines={1}
+                        >
+                          {project.name}
+                        </Text>
+                        <Text
+                          style={themedStyles.menuItemSubText}
+                          numberOfLines={1}
+                        >
+                          {project.sessions.length} chat
+                          {project.sessions.length === 1 ? "" : "s"}
+                        </Text>
+                      </View>
+
+                      <View style={themedStyles.chevronShell}>
+                        <SymbolView
+                          name={{
+                            ios: expanded ? "chevron.down" : "chevron.right",
+                            android: expanded ? "expand_more" : "chevron_right",
+                            web: expanded ? "expand_more" : "chevron_right",
+                          }}
+                          tintColor={colors.textSecondary}
+                          size={14}
+                          style={themedStyles.chevron}
                         />
-                      ) : (
-                        <FolderIcon size={20} color={colors.textSecondary} />
-                      )}
-                      <Text style={themedStyles.menuItemText} numberOfLines={1}>
-                        {project.name}
-                      </Text>
-                      <SymbolView
-                        name={{
-                          ios: expanded ? "chevron.down" : "chevron.right",
-                          android: expanded ? "expand_more" : "chevron_right",
-                          web: expanded ? "expand_more" : "chevron_right",
-                        }}
-                        tintColor={colors.textSecondary}
-                        size={14}
-                        style={themedStyles.chevron}
-                      />
+                      </View>
                     </Pressable>
 
                     {expanded && (
                       <View style={themedStyles.chatList}>
-                        {project.sessions
-                          .slice()
-                          .sort((a, b) => b.lastActiveAt - a.lastActiveAt)
-                          .map((session) => (
-                            <Pressable
-                              key={session.id}
-                              onPress={() =>
-                                handleSessionPress(project.id, session.id)
-                              }
-                              style={({ pressed }) => [
-                                themedStyles.chatItem,
-                                activeSessionId === session.id && {
-                                  backgroundColor: colors.backgroundSelected,
-                                },
-                                pressed && {
-                                  backgroundColor: colors.backgroundElement,
-                                },
-                              ]}
-                            >
-                              <Text
-                                style={[
-                                  themedStyles.chatItemText,
-                                  activeSessionId === session.id && {
-                                    color: colors.text,
-                                    fontWeight: "500",
-                                  },
-                                ]}
-                                numberOfLines={1}
-                              >
-                                {session.name}
-                              </Text>
-                            </Pressable>
-                          ))}
+                        <View style={themedStyles.chatItems}>
+                          {project.sessions.length === 0 ? (
+                            <Text style={themedStyles.emptyChatText}>
+                              No chats yet
+                            </Text>
+                          ) : (
+                            project.sessions
+                              .slice()
+                              .sort((a, b) => b.lastActiveAt - a.lastActiveAt)
+                              .map((session) => (
+                                <Pressable
+                                  key={session.id}
+                                  onPress={() =>
+                                    handleSessionPress(project.id, session.id)
+                                  }
+                                  style={({ pressed }) => [
+                                    themedStyles.chatItem,
+                                    activeSessionId === session.id &&
+                                      themedStyles.chatItemActive,
+                                    pressed && themedStyles.chatItemPressed,
+                                  ]}
+                                >
+                                  <Text
+                                    style={[
+                                      themedStyles.chatItemText,
+                                      activeSessionId === session.id &&
+                                        themedStyles.chatItemTextActive,
+                                    ]}
+                                    numberOfLines={1}
+                                  >
+                                    {session.name}
+                                  </Text>
+                                </Pressable>
+                              ))
+                          )}
+                        </View>
                       </View>
                     )}
                   </View>
@@ -394,33 +433,60 @@ export const ProjectSidebar: React.FC<ProjectSidebarProps> = ({
             </ScrollView>
 
             <View style={themedStyles.footer}>
-
-
-              <View style={themedStyles.limitsContainer}>
-                <View style={themedStyles.limitItem}>
-                  <View style={themedStyles.limitHeader}>
-                    <Text style={themedStyles.limitLabel}>Monthly limit</Text>
-                    <Text style={themedStyles.limitValue}>75%</Text>
+              <LinearGradient
+                colors={["transparent", colors.background, colors.background]}
+                locations={[0, 1, 1]}
+                style={themedStyles.gradientContainer}
+              >
+                <View style={themedStyles.usageContent}>
+                  <View style={themedStyles.usageHeader}>
+                    <Text style={themedStyles.usageTitle}>Usage</Text>
+                    <Text style={themedStyles.usageHint}>
+                      Refreshes automatically
+                    </Text>
                   </View>
-                  <View style={themedStyles.progressBarBg}>
-                    <View
-                      style={[themedStyles.progressBarFill, { width: "75%" }]}
-                    />
+
+                  <View style={themedStyles.limitsContainer}>
+                    <View style={themedStyles.limitItem}>
+                      <View style={themedStyles.limitHeader}>
+                        <Text style={themedStyles.limitLabel}>
+                          Monthly limit
+                        </Text>
+                        <Text style={themedStyles.limitValue}>
+                          {monthlyUsage}%
+                        </Text>
+                      </View>
+                      <View style={themedStyles.progressBarBg}>
+                        <View
+                          style={[
+                            themedStyles.progressBarFill,
+                            { width: `${monthlyUsage}%` },
+                          ]}
+                        />
+                      </View>
+                    </View>
+
+                    <View style={themedStyles.limitItem}>
+                      <View style={themedStyles.limitHeader}>
+                        <Text style={themedStyles.limitLabel}>
+                          Weekly limit
+                        </Text>
+                        <Text style={themedStyles.limitValue}>
+                          {weeklyUsage}%
+                        </Text>
+                      </View>
+                      <View style={themedStyles.progressBarBg}>
+                        <View
+                          style={[
+                            themedStyles.progressBarFill,
+                            { width: `${weeklyUsage}%` },
+                          ]}
+                        />
+                      </View>
+                    </View>
                   </View>
                 </View>
-
-                <View style={themedStyles.limitItem}>
-                  <View style={themedStyles.limitHeader}>
-                    <Text style={themedStyles.limitLabel}>Weekly limit</Text>
-                    <Text style={themedStyles.limitValue}>40%</Text>
-                  </View>
-                  <View style={themedStyles.progressBarBg}>
-                    <View
-                      style={[themedStyles.progressBarFill, { width: "40%" }]}
-                    />
-                  </View>
-                </View>
-              </View>
+              </LinearGradient>
             </View>
           </SafeAreaView>
         </View>
@@ -456,7 +522,7 @@ const Spacing = {
   five: 20,
 };
 
-const createStyles = (colors: ReturnType<typeof useTheme>) =>
+const createStyles = (colors: ReturnType<typeof useTheme>, isDark: boolean) =>
   StyleSheet.create({
     wrapper: {
       flex: 1,
@@ -513,7 +579,31 @@ const createStyles = (colors: ReturnType<typeof useTheme>) =>
       justifyContent: "space-between",
       alignItems: "center",
       paddingHorizontal: Spacing.four,
-      paddingTop: Platform.OS === "android" ? 5 : 5,
+      minHeight: 55,
+      gap: 12,
+    },
+    logoText: {
+      fontSize: 28,
+      lineHeight: 32,
+      fontWeight: "700",
+      color: colors.text,
+      letterSpacing: -0.8,
+    },
+    countPill: {
+      minWidth: 28,
+      height: 24,
+      paddingHorizontal: 8,
+      borderRadius: 12,
+      justifyContent: "center",
+      alignItems: "center",
+      backgroundColor: isDark ? "rgba(255, 255, 255, 0.1)" : "#ECEDEF",
+      borderWidth: 1,
+      borderColor: isDark ? "rgba(255, 255, 255, 0.12)" : "#D8DADF",
+    },
+    countPillText: {
+      color: colors.text,
+      fontSize: 12,
+      fontWeight: "700",
     },
     headerActions: {
       flexDirection: "row",
@@ -539,74 +629,167 @@ const createStyles = (colors: ReturnType<typeof useTheme>) =>
       height: 20,
       backgroundColor: colors.backgroundSelected,
     },
-    logoText: {
-      fontSize: 16,
-      fontWeight: "700",
-      color: colors.text,
-      letterSpacing: -0.5,
-      marginLeft: 4,
+    sectionRow: {
+      paddingHorizontal: Spacing.four,
+      flexDirection: "row",
+      alignItems: "center",
+      justifyContent: "space-between",
     },
-    headerButton: {
-      padding: 2,
+    sectionLabel: {
+      fontSize: 13,
+      color: colors.textSecondary,
+      fontWeight: "600",
+      letterSpacing: 0.2,
+      textTransform: "uppercase",
+    },
+    sectionMeta: {
+      fontSize: 13,
+      color: colors.textSecondary,
+      fontWeight: "500",
+    },
+    projectScroll: {
+      flex: 1,
     },
     scrollContent: {
       paddingHorizontal: Spacing.two,
       paddingTop: 60, // Account for absolute header
       paddingBottom: 40,
     },
+    projectItemWrap: {
+      borderRadius: 14,
+      overflow: "hidden",
+      marginBottom: 10,
+    },
     menuItem: {
       flexDirection: "row",
       alignItems: "center",
-      paddingVertical: 12,
-      paddingHorizontal: Spacing.three,
-      borderRadius: 8,
-      marginBottom: 4,
+      minHeight: 62,
+      paddingVertical: 11,
+      paddingHorizontal: 12,
+      borderRadius: 14,
+    },
+    menuItemExpanded: {
+      paddingBottom: 8,
+      borderBottomLeftRadius: 0,
+      borderBottomRightRadius: 0,
+    },
+    menuItemActive: {
+      backgroundColor: isDark ? "rgba(255, 255, 255, 0.06)" : "#ECEEF2",
+    },
+    menuItemPressed: {
+      opacity: 0.82,
+    },
+    folderShell: {
+      width: 32,
+      height: 32,
+      borderRadius: 10,
+      backgroundColor: isDark ? "rgba(255, 255, 255, 0.05)" : "#E9EAED",
+      alignItems: "center",
+      justifyContent: "center",
+    },
+    folderShellExpanded: {
+      backgroundColor: isDark ? "rgba(255, 255, 255, 0.1)" : "#DDDFE3",
+    },
+    menuItemMeta: {
+      marginLeft: 12,
+      flex: 1,
+      gap: 2,
     },
     menuItemText: {
-      marginLeft: Spacing.three,
-      fontSize: 16,
+      fontSize: 17,
       color: colors.text,
+      fontWeight: "600",
+    },
+    menuItemSubText: {
+      fontSize: 12,
+      color: colors.textSecondary,
+      fontWeight: "500",
+    },
+    chevronShell: {
+      width: 24,
+      height: 24,
+      borderRadius: 8,
+      alignItems: "center",
+      justifyContent: "center",
+      backgroundColor: "transparent",
+    },
+    chevron: {
+      marginLeft: 0,
+    },
+    chatList: {
+      paddingRight: 12,
+      paddingBottom: 12,
+      paddingLeft: 12,
+      paddingTop: 2,
+      borderBottomLeftRadius: 14,
+      borderBottomRightRadius: 14,
+      backgroundColor: isDark ? "rgba(255, 255, 255, 0.06)" : "#ECEEF2",
+    },
+    chatItems: {
+      gap: 6,
+    },
+    chatItem: {
+      minHeight: 36,
+      borderRadius: 10,
+      paddingHorizontal: 10,
+      flexDirection: "row",
+      alignItems: "center",
+      gap: 8,
+      backgroundColor: "transparent",
+    },
+    chatItemActive: {
+      backgroundColor: isDark ? "rgba(255, 255, 255, 0.08)" : "#E2E5EA",
+    },
+    chatItemPressed: {
+      backgroundColor: isDark ? "rgba(255, 255, 255, 0.06)" : "#E8EBF0",
+    },
+    chatItemText: {
+      fontSize: 14,
+      color: colors.textSecondary,
       fontWeight: "500",
       flex: 1,
     },
-    chevron: {
-      marginLeft: "auto",
+    chatItemTextActive: {
+      color: colors.text,
+      fontWeight: "600",
     },
-    chatList: {
-      marginLeft: 12,
-      marginBottom: Spacing.two,
-    },
-    chatItem: {
-      paddingVertical: 8,
-      paddingLeft: Spacing.four + 12,
-      paddingRight: Spacing.two,
-      borderRadius: 6,
-      flexDirection: "row",
-      alignItems: "center",
-      marginBottom: 2,
-    },
-    chatIconWrapper: {
-      marginRight: 8,
-      marginTop: 1,
-    },
-    chatItemText: {
-      fontSize: 15,
+    emptyChatText: {
+      fontSize: 13,
       color: colors.textSecondary,
-      fontWeight: "400",
-      flex: 1,
+      fontWeight: "500",
+      paddingVertical: 6,
+      paddingHorizontal: 10,
     },
     footer: {
       paddingHorizontal: Spacing.four,
       paddingBottom: Spacing.five,
+      paddingTop: 10,
       marginTop: "auto",
-      borderTopWidth: StyleSheet.hairlineWidth,
-      borderTopColor: colors.backgroundElement,
-      paddingTop: Spacing.four,
-      gap: Spacing.four,
     },
-
+    gradientContainer: {
+      width: "100%",
+    },
+    usageContent: {
+      paddingTop: 8,
+      gap: 12,
+    },
+    usageHeader: {
+      flexDirection: "row",
+      justifyContent: "space-between",
+      alignItems: "center",
+    },
+    usageTitle: {
+      fontSize: 15,
+      color: colors.text,
+      fontWeight: "700",
+    },
+    usageHint: {
+      fontSize: 12,
+      color: colors.textSecondary,
+      fontWeight: "500",
+    },
     limitsContainer: {
-      gap: Spacing.three,
+      gap: 12,
     },
     limitItem: {
       gap: 6,
@@ -617,26 +800,27 @@ const createStyles = (colors: ReturnType<typeof useTheme>) =>
       alignItems: "center",
     },
     limitLabel: {
-      fontSize: 14,
+      fontSize: 13,
       color: colors.textSecondary,
-      fontWeight: "500",
+      fontWeight: "600",
     },
     limitValue: {
       fontSize: 13,
-      color: colors.textSecondary,
+      color: colors.text,
+      fontWeight: "700",
     },
     progressBarBg: {
-      height: 4,
-      backgroundColor: colors.backgroundElement,
-      borderRadius: 2,
+      height: 6,
+      backgroundColor: isDark ? "rgba(255, 255, 255, 0.08)" : "#DDE1E7",
+      borderRadius: 6,
       overflow: "hidden",
     },
     progressBarFill: {
       height: "100%",
       backgroundColor: colors.text,
-      borderRadius: 2,
+      borderRadius: 6,
     },
     pressed: {
-      opacity: 0.7,
+      opacity: 0.72,
     },
   });
