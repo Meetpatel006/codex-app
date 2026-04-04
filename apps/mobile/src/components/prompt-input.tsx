@@ -30,6 +30,7 @@ export function PromptInput({ onSend }: PromptInputProps) {
   const [prompt, setPrompt] = useState("");
   const [isFocused, setIsFocused] = useState(false);
   const isFocusedRef = useRef(false);
+  const isDropdownOpenRef = useRef(false);
   const theme = useTheme();
   const inputRef = useRef<TextInput>(null);
 
@@ -44,8 +45,10 @@ export function PromptInput({ onSend }: PromptInputProps) {
 
   // Sync keyboard height
   useEffect(() => {
-    const showEvent = Platform.OS === "ios" ? "keyboardWillShow" : "keyboardDidShow";
-    const hideEvent = Platform.OS === "ios" ? "keyboardWillHide" : "keyboardDidHide";
+    const showEvent =
+      Platform.OS === "ios" ? "keyboardWillShow" : "keyboardDidShow";
+    const hideEvent =
+      Platform.OS === "ios" ? "keyboardWillHide" : "keyboardDidHide";
 
     const showSub = Keyboard.addListener(showEvent, (e) => {
       Animated.spring(keyboardHeightAnim, {
@@ -120,6 +123,9 @@ export function PromptInput({ onSend }: PromptInputProps) {
 
   const animateToCollapsed = useCallback(() => {
     if (!isFocusedRef.current) return;
+    if (isDropdownOpenRef.current) {
+      return;
+    }
     isFocusedRef.current = false;
     inputRef.current?.blur();
     Animated.parallel([
@@ -158,8 +164,10 @@ export function PromptInput({ onSend }: PromptInputProps) {
           useNativeDriver: true,
         }),
       ]),
-    ]).start(() => setIsFocused(false));
-  }, []);
+    ]).start(() => {
+      setIsFocused(false);
+    });
+  }, [isDropdownOpenRef]);
 
   // Collapse when keyboard hides (user taps outside or swipes down)
   useEffect(() => {
@@ -181,10 +189,7 @@ export function PromptInput({ onSend }: PromptInputProps) {
 
   return (
     <Animated.View
-      style={[
-        styles.keyboardAvoidingView,
-        { bottom: keyboardHeightAnim },
-      ]}
+      style={[styles.keyboardAvoidingView, { bottom: keyboardHeightAnim }]}
     >
       <LinearGradient
         colors={["transparent", theme.background, theme.background]}
@@ -220,7 +225,10 @@ export function PromptInput({ onSend }: PromptInputProps) {
 
               <Pressable onPress={handleFocus} style={styles.pillCenter}>
                 <Text
-                  style={[styles.pillPlaceholder, { color: theme.textSecondary }]}
+                  style={[
+                    styles.pillPlaceholder,
+                    { color: theme.textSecondary },
+                  ]}
                   numberOfLines={1}
                 >
                   Ask anything...
@@ -237,7 +245,10 @@ export function PromptInput({ onSend }: PromptInputProps) {
 
               <Pressable
                 onPress={handleSend}
-                style={[styles.pillSendButton, { backgroundColor: theme.userBubble }]}
+                style={[
+                  styles.pillSendButton,
+                  { backgroundColor: theme.userBubble },
+                ]}
               >
                 <SymbolView
                   name={{
@@ -262,10 +273,7 @@ export function PromptInput({ onSend }: PromptInputProps) {
                 placeholder="Type your prompt..."
                 value={prompt}
                 onChangeText={setPrompt}
-                style={[
-                  styles.input,
-                  { color: theme.text },
-                ]}
+                style={[styles.input, { color: theme.text }]}
                 placeholderTextColor={theme.textSecondary}
                 multiline={true}
                 textAlignVertical="top"
@@ -286,8 +294,22 @@ export function PromptInput({ onSend }: PromptInputProps) {
                       weight="bold"
                     />
                   </Pressable>
-                  <ModelSelector />
-                  <ReasoningSelector />
+                  <ModelSelector
+                    onDropdownOpen={() => {
+                      isDropdownOpenRef.current = true;
+                    }}
+                    onDropdownClose={() => {
+                      isDropdownOpenRef.current = false;
+                    }}
+                  />
+                  <ReasoningSelector
+                    onDropdownOpen={() => {
+                      isDropdownOpenRef.current = true;
+                    }}
+                    onDropdownClose={() => {
+                      isDropdownOpenRef.current = false;
+                    }}
+                  />
                 </View>
 
                 <View style={styles.rightActions}>
@@ -423,6 +445,8 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     marginLeft: Spacing.half,
+    flexShrink: 1,
+    minWidth: 0,
   },
   rightActions: {
     flexDirection: "row",

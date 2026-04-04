@@ -16,7 +16,15 @@ const FALLBACK_MODEL_OPTIONS: DropdownOption[] = [
   { label: "gpt-5.1-codex-mini", value: "gpt-5.1-codex-mini" },
 ];
 
-export function ModelSelector() {
+interface ModelSelectorProps {
+  onDropdownOpen?: () => void;
+  onDropdownClose?: () => void;
+}
+
+export function ModelSelector({
+  onDropdownOpen,
+  onDropdownClose,
+}: ModelSelectorProps) {
   const runtimeOptions = useRuntimeOptionsStore((state) => state.options);
   const selectedModel = useRuntimeOptionsStore((state) => state.selectedModel);
   const threadSelections = useRuntimeOptionsStore(
@@ -91,6 +99,8 @@ export function ModelSelector() {
         fontWeight: "600",
       }}
       dismissKeyboardOnOpen={false}
+      onDropdownOpen={onDropdownOpen}
+      onDropdownClose={onDropdownClose}
     />
   );
 }

@@ -12,7 +12,15 @@ const REASONING_OPTIONS: DropdownOption[] = [
   { label: "High", value: "high" },
 ];
 
-export function ReasoningSelector() {
+interface ReasoningSelectorProps {
+  onDropdownOpen?: () => void;
+  onDropdownClose?: () => void;
+}
+
+export function ReasoningSelector({
+  onDropdownOpen,
+  onDropdownClose,
+}: ReasoningSelectorProps) {
   const runtimeOptions = useRuntimeOptionsStore((state) => state.options);
   const modelOptions = useRuntimeOptionsStore((state) => state.modelOptions);
   const selectedModel = useRuntimeOptionsStore((state) => state.selectedModel);
@@ -102,6 +110,8 @@ export function ReasoningSelector() {
         fontWeight: "600",
       }}
       dismissKeyboardOnOpen={false}
+      onDropdownOpen={onDropdownOpen}
+      onDropdownClose={onDropdownClose}
     />
   );
 }

@@ -32,6 +32,8 @@ export interface DropdownMenuProps {
   labelStyle?: TextStyle;
   direction?: "up" | "down" | "auto";
   dismissKeyboardOnOpen?: boolean;
+  onDropdownOpen?: () => void;
+  onDropdownClose?: () => void;
 }
 
 export function DropdownMenu({
@@ -44,24 +46,45 @@ export function DropdownMenu({
   labelStyle,
   direction = "auto",
   dismissKeyboardOnOpen = true,
+  onDropdownOpen,
+  onDropdownClose,
 }: DropdownMenuProps) {
   const [isVisible, setIsVisible] = useState(false);
-  const [layout, setLayout] = useState({ x: 0, y: 0, width: 0, height: 0 });
+  const [layout, setLayout] = useState({
+    x: 0,
+    y: 0,
+    width: 0,
+    height: 0,
+    windowHeight: 0,
+  });
   const containerRef = useRef<View>(null);
   const theme = useTheme();
+  const measureTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const handlePress = () => {
-    if (dismissKeyboardOnOpen) {
+    onDropdownOpen?.();
+    if (Keyboard.isVisible()) {
       Keyboard.dismiss();
+      if (measureTimeoutRef.current) clearTimeout(measureTimeoutRef.current);
+      measureTimeoutRef.current = setTimeout(() => {
+        containerRef.current?.measureInWindow((x, y, width, height) => {
+          const wh = Dimensions.get("window").height;
+          setLayout({ x, y, width, height, windowHeight: wh });
+          setIsVisible(true);
+        });
+      }, 350);
+    } else {
+      containerRef.current?.measureInWindow((x, y, width, height) => {
+        const wh = Dimensions.get("window").height;
+        setLayout({ x, y, width, height, windowHeight: wh });
+        setIsVisible(true);
+      });
     }
-    containerRef.current?.measure((x, y, width, height, pageX, pageY) => {
-      setLayout({ x: pageX, y: pageY, width, height });
-      setIsVisible(true);
-    });
   };
 
   const handleSelect = (option: DropdownOption) => {
     onSelect?.(option);
+    onDropdownClose?.();
     setIsVisible(false);
   };
 
@@ -70,7 +93,7 @@ export function DropdownMenu({
 
   const spaceBelow = windowHeight - (layout.y + layout.height);
   const spaceAbove = layout.y;
-  const menuMaxHeight = 300;
+  const menuMaxHeight = 220;
 
   const effectiveDirection =
     direction === "auto"
@@ -81,11 +104,14 @@ export function DropdownMenu({
 
   const menuPosition =
     effectiveDirection === "up"
-      ? { bottom: windowHeight - layout.y + 4 }
+      ? { bottom: windowHeight - layout.y - 30 }
       : { top: layout.y + layout.height + 4 };
   const activeValue = selectedValue ?? label;
   const menuWidth = Math.max(layout.width + 28, 212);
-  const menuLeft = Math.max(16, Math.min(layout.x, windowWidth - menuWidth - 16));
+  const menuLeft = Math.max(
+    16,
+    Math.min(layout.x, windowWidth - menuWidth - 16),
+  );
 
   return (
     <>
@@ -113,7 +139,11 @@ export function DropdownMenu({
                 style={styles.icon}
               />
             ))}
-          <ThemedText style={[styles.label, labelStyle]} type="small">
+          <ThemedText
+            style={[styles.label, labelStyle]}
+            type="small"
+            numberOfLines={1}
+          >
             {label}
           </ThemedText>
           <SymbolView
@@ -135,11 +165,17 @@ export function DropdownMenu({
         visible={isVisible}
         transparent={true}
         animationType="none"
-        onRequestClose={() => setIsVisible(false)}
+        onRequestClose={() => {
+          onDropdownClose?.();
+          setIsVisible(false);
+        }}
       >
         <Pressable
           style={styles.modalOverlay}
-          onPress={() => setIsVisible(false)}
+          onPress={() => {
+            onDropdownClose?.();
+            setIsVisible(false);
+          }}
         >
           <View
             style={[
@@ -195,7 +231,10 @@ export function DropdownMenu({
                         />
                       ))}
                     <ThemedText
-                      style={[styles.optionLabel, isActive && styles.optionLabelActive]}
+                      style={[
+                        styles.optionLabel,
+                        isActive && styles.optionLabelActive,
+                      ]}
                       numberOfLines={1}
                     >
                       {option.label}
@@ -238,6 +277,7 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     gap: 6,
+    flexShrink: 1,
   },
   icon: {
     opacity: 0.9,
