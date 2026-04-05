@@ -15,12 +15,12 @@ import {
   ProjectSidebar,
   type SidebarUsageItem,
 } from "@/components/ProjectSidebar";
+import { PairingScreen } from "@/components/PairingScreen";
 import { PromptInput } from "@/components/prompt-input";
 import { ChatHeader } from "@/components/chat-header";
 import { CodeDiffView } from "@/components/code-diff-view";
 import { EmptyChatState } from "@/components/EmptyChatState";
 import { GitCommitView } from "@/components/git-commit-view";
-import { PairDeviceView } from "@/components/pair-device-view";
 import { BottomSheet } from "@/components/ui/bottom-sheet";
 import { SidePanel } from "@/components/ui/side-panel";
 import { buildRequest } from "@/services/jsonrpc";
@@ -1112,7 +1112,7 @@ export default function ChatScreen() {
   const setActiveSession = useSessionStore((state) => state.setActiveSession);
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [commitSheetOpen, setCommitSheetOpen] = useState(false);
-  const [pairSheetOpen, setPairSheetOpen] = useState(false);
+  const [isConnected, setIsConnected] = useState(false);
   const [commitStatusText, setCommitStatusText] = useState("");
   const [commitSubmitting, setCommitSubmitting] = useState(false);
   const [commitBranch, setCommitBranch] = useState("-");
@@ -1834,9 +1834,23 @@ export default function ChatScreen() {
   useEffect(() => {
     const onError = relayService.on("error", (error) => {
       console.warn("[mobile][relay/error]", error?.message || String(error));
+      if (
+        error instanceof Error &&
+        error.message.toLowerCase().includes("relay disconnected")
+      ) {
+        setIsConnected(false);
+      }
+    });
+
+    const onPresence = relayService.on("presence", (presence) => {
+      setIsConnected(presence === "online");
+      if (presence !== "online") {
+        codexInitializedRef.current = false;
+      }
     });
 
     const onReady = relayService.on("ready", () => {
+      setIsConnected(true);
       codexInitializedRef.current = false;
       void (async () => {
         void refreshCodexSessions().catch((error) => {
@@ -2399,6 +2413,7 @@ export default function ChatScreen() {
 
     return () => {
       onError();
+      onPresence();
       onReady();
       onMessage();
     };
@@ -2456,7 +2471,7 @@ export default function ChatScreen() {
   useEffect(() => {
     async function connect() {
       if (!pairing) {
-        setPairSheetOpen(true);
+        setIsConnected(false);
         return;
       }
 
@@ -2525,7 +2540,7 @@ export default function ChatScreen() {
 
       if (pairing.expiryMs < Date.now()) {
         if (!resolvedSessionId) {
-          setPairSheetOpen(true);
+          setIsConnected(false);
           return;
         }
       }
@@ -2546,7 +2561,7 @@ export default function ChatScreen() {
 
     void connect().catch((error) => {
       console.warn("[mobile][relay/connect] failed", error);
-      setPairSheetOpen(true);
+      setIsConnected(false);
     });
   }, [pairing, privateKey, publicKey, setIdentity, setPairing]);
 
@@ -2795,11 +2810,15 @@ export default function ChatScreen() {
     }
   }
 
+  if (!pairing || !isConnected) {
+    return <PairingScreen />;
+  }
+
   return (
     <>
       <ProjectSidebar
         isOpen={sidebarOpen}
-        gesturesEnabled={!pairSheetOpen && !isDiffPanelOpen}
+        gesturesEnabled={!isDiffPanelOpen}
         usageItems={sidebarUsageItems}
         usageHint={usageHintText}
         usageEmptyText="Usage data unavailable"
@@ -2843,7 +2862,6 @@ export default function ChatScreen() {
             onOpenSidebar={() => setSidebarOpen(true)}
             onOpenCommitSheet={() => setCommitSheetOpen(true)}
             onOpenDiffPanel={openDiffPanel}
-            onOpenPairSheet={() => setPairSheetOpen(true)}
           />
 
           <ChatLoadingOverlay
@@ -2980,13 +2998,6 @@ export default function ChatScreen() {
           }}
         />
       </BottomSheet>
-
-      <SidePanel
-        isVisible={pairSheetOpen}
-        onClose={() => setPairSheetOpen(false)}
-      >
-        <PairDeviceView onPaired={() => setPairSheetOpen(false)} />
-      </SidePanel>
 
       <SidePanel isVisible={isDiffPanelOpen} onClose={closeDiffPanel}>
         <CodeDiffView onClose={closeDiffPanel} />

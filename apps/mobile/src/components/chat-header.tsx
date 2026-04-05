@@ -1,26 +1,19 @@
 import React from "react";
-import { Pressable, StyleSheet, Text, View, useColorScheme } from "react-native";
+import { Pressable, StyleSheet, View } from "react-native";
 import { LinearGradient } from "expo-linear-gradient";
-import {
-  MenuIcon,
-  GitCommitIcon,
-  CodeDiffIcon,
-  QrCodeIcon,
-} from "@/components/icons/Icon";
+import { MenuIcon, GitCommitIcon, CodeDiffIcon } from "@/components/icons/Icon";
 import { useTheme } from "@/hooks/use-theme";
 
 type ChatHeaderProps = {
   onOpenSidebar: () => void;
   onOpenCommitSheet: () => void;
   onOpenDiffPanel: () => void;
-  onOpenPairSheet: () => void;
 };
 
 export function ChatHeader({
   onOpenSidebar,
   onOpenCommitSheet,
   onOpenDiffPanel,
-  onOpenPairSheet,
 }: ChatHeaderProps) {
   const theme = useTheme();
 
@@ -45,7 +38,15 @@ export function ChatHeader({
         >
           <MenuIcon size={22} color={theme.text} />
         </Pressable>
-        <View style={[styles.actionPill, { borderColor: theme.backgroundSelected, backgroundColor: theme.backgroundElement }]}>
+        <View
+          style={[
+            styles.actionPill,
+            {
+              borderColor: theme.backgroundSelected,
+              backgroundColor: theme.backgroundElement,
+            },
+          ]}
+        >
           <Pressable
             onPress={onOpenCommitSheet}
             style={styles.pillButton}
@@ -54,7 +55,12 @@ export function ChatHeader({
           >
             <GitCommitIcon size={22} color={theme.text} />
           </Pressable>
-          <View style={[styles.pillSeparator, { backgroundColor: theme.backgroundSelected }]} />
+          <View
+            style={[
+              styles.pillSeparator,
+              { backgroundColor: theme.backgroundSelected },
+            ]}
+          />
           <Pressable
             onPress={onOpenDiffPanel}
             style={styles.pillButton}
@@ -62,15 +68,6 @@ export function ChatHeader({
             hitSlop={8}
           >
             <CodeDiffIcon size={22} color={theme.text} />
-          </Pressable>
-          <View style={[styles.pillSeparator, { backgroundColor: theme.backgroundSelected }]} />
-          <Pressable
-            onPress={onOpenPairSheet}
-            style={styles.pillButton}
-            accessibilityLabel="Open pair device sheet"
-            hitSlop={8}
-          >
-            <QrCodeIcon size={22} color={theme.text} />
           </Pressable>
         </View>
       </View>
