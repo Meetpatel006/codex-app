@@ -7,6 +7,24 @@ import "@/global.css";
 
 import { Platform } from "react-native";
 
+import {
+  FontFamilies,
+  FontSizes,
+  FontWeights,
+  Typography,
+  type NormalFontId,
+  type MonoFontId,
+  type DisplayFontId,
+} from "./fonts";
+
+export { FontFamilies, FontSizes, FontWeights, Typography };
+export type {
+  NormalFontId,
+  MonoFontId,
+  DisplayFontId,
+  TypographyStyle,
+} from "./fonts";
+
 export const Colors = {
   light: {
     text: "#000000",
@@ -82,30 +100,39 @@ export const Colors = {
 
 export type ThemeColor = keyof typeof Colors.light & keyof typeof Colors.dark;
 
-export const Fonts = Platform.select({
-  ios: {
-    /** iOS `UIFontDescriptorSystemDesignDefault` */
-    sans: "system-ui",
-    /** iOS `UIFontDescriptorSystemDesignSerif` */
-    serif: "ui-serif",
-    /** iOS `UIFontDescriptorSystemDesignRounded` */
-    rounded: "ui-rounded",
-    /** iOS `UIFontDescriptorSystemDesignMonospaced` */
-    mono: "ui-monospace",
-  },
-  default: {
-    sans: "normal",
-    serif: "serif",
-    rounded: "normal",
-    mono: "monospace",
-  },
-  web: {
-    sans: "var(--font-display)",
-    serif: "var(--font-serif)",
-    rounded: "var(--font-rounded)",
-    mono: "var(--font-mono)",
-  },
-});
+export type FontConfig = {
+  normal: NormalFontId;
+  mono: MonoFontId;
+  display: DisplayFontId;
+  normalSize: number;
+  monoSize: number;
+};
+
+export const DefaultFontConfig: FontConfig = {
+  normal: "ibmPlexSans",
+  mono: "jetBrainsMono",
+  display: "spaceGrotesk",
+  normalSize: 15,
+  monoSize: 13,
+};
+
+export const Fonts = {
+  normal: FontFamilies.normal,
+  mono: FontFamilies.mono,
+  display: FontFamilies.display,
+} as const;
+
+export function getNormalFont(config: FontConfig): string {
+  return FontFamilies.normal[config.normal];
+}
+
+export function getMonoFont(config: FontConfig): string {
+  return FontFamilies.mono[config.mono];
+}
+
+export function getDisplayFont(config: FontConfig): string {
+  return FontFamilies.display[config.display];
+}
 
 export const Spacing = {
   half: 2,
