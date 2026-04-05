@@ -12,6 +12,7 @@ import {
 } from "react-native";
 import { LinearGradient } from "expo-linear-gradient";
 import { SymbolView } from "expo-symbols";
+import { FontFamilies } from "@/constants/fonts";
 import { Spacing } from "@/constants/theme";
 import { useTheme } from "@/hooks/use-theme";
 import { PromptExtras } from "./prompt-extras";
@@ -413,6 +414,7 @@ const styles = StyleSheet.create({
   },
   pillPlaceholder: {
     fontSize: 16,
+    fontFamily: FontFamilies.normal.ibmPlexSans,
   },
   pillSendButton: {
     width: 36,
@@ -430,6 +432,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: Spacing.three,
     paddingTop: Spacing.three,
     fontSize: 16,
+    fontFamily: FontFamilies.normal.ibmPlexSans,
     flex: 1,
     textAlignVertical: "top",
   },

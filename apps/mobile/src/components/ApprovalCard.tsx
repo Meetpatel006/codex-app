@@ -1,6 +1,7 @@
 import React, { useMemo } from "react";
 import { Pressable, StyleSheet, Text, View } from "react-native";
 import { Image } from "expo-image";
+import { FontFamilies } from "@/constants/fonts";
 import { useTheme } from "@/hooks/use-theme";
 import { useColorScheme } from "@/hooks/use-color-scheme";
 import { getVscodeIconUrlForEntry } from "@/utils/vscode-icons";
@@ -159,6 +160,7 @@ const createStyles = (colors: ReturnType<typeof useTheme>) =>
       color: colors.text,
       fontSize: 14,
       fontWeight: "600",
+      fontFamily: FontFamilies.normal.ibmPlexSans,
     },
     commandBlock: {
       borderRadius: 12,
@@ -172,7 +174,7 @@ const createStyles = (colors: ReturnType<typeof useTheme>) =>
       color: colors.text,
       fontSize: 13,
       lineHeight: 18,
-      fontFamily: "monospace",
+      fontFamily: FontFamilies.mono.jetBrainsMono,
     },
     fileList: {
       marginTop: 4,
@@ -196,16 +198,18 @@ const createStyles = (colors: ReturnType<typeof useTheme>) =>
       fontWeight: "600",
       flex: 1,
       minWidth: 0,
-      fontFamily: "monospace",
+      fontFamily: FontFamilies.mono.jetBrainsMono,
     },
     moreFiles: {
       color: colors.textSecondary,
       fontSize: 12,
       fontWeight: "600",
+      fontFamily: FontFamilies.normal.ibmPlexSans,
     },
     cwdText: {
       color: colors.textSecondary,
       fontSize: 12,
+      fontFamily: FontFamilies.normal.ibmPlexSans,
     },
     actions: {
       flexDirection: "row",
@@ -230,6 +234,7 @@ const createStyles = (colors: ReturnType<typeof useTheme>) =>
       color: "#FFFFFF",
       fontSize: 14,
       fontWeight: "600",
+      fontFamily: FontFamilies.normal.ibmPlexSans,
     },
     buttonPressed: {
       opacity: 0.85,

@@ -1,5 +1,6 @@
 import React from "react";
 import { View, Text, StyleSheet } from "react-native";
+import { FontFamilies } from "@/constants/fonts";
 import { DropdownMenu, DropdownOption } from "./ui/dropdown-menu";
 import { CodexIcon } from "./icons/Icon";
 import { useTheme } from "@/hooks/use-theme";
@@ -11,14 +12,14 @@ interface EmptyChatStateProps {
   onProjectSelect?: (projectId: string) => void;
 }
 
-export function EmptyChatState({ 
+export function EmptyChatState({
   projectName = "codex-app",
   projects = [],
-  onProjectSelect
+  onProjectSelect,
 }: EmptyChatStateProps) {
   const theme = useTheme();
 
-  const options: DropdownOption[] = projects.map(p => ({
+  const options: DropdownOption[] = projects.map((p) => ({
     label: p.name,
     value: p.id,
   }));
@@ -31,7 +32,7 @@ export function EmptyChatState({
         </View>
 
         <Text style={[styles.title, { color: theme.text }]}>Let's build</Text>
-        
+
         <DropdownMenu
           label={projectName}
           options={options}
@@ -62,6 +63,7 @@ const styles = StyleSheet.create({
     fontSize: 32,
     fontWeight: "600",
     letterSpacing: -0.5,
+    fontFamily: FontFamilies.display.spaceGrotesk,
   },
   dropdown: {
     backgroundColor: "transparent",
@@ -73,5 +75,6 @@ const styles = StyleSheet.create({
     fontSize: 24,
     fontWeight: "500",
     color: "#B0B4BA",
+    fontFamily: FontFamilies.normal.ibmPlexSans,
   },
 });

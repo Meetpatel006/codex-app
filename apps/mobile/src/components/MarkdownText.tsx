@@ -7,6 +7,7 @@ import {
   type TextStyle,
   View,
 } from "react-native";
+import { FontFamilies } from "@/constants/fonts";
 import { parseInlineMentions } from "@/utils/markdown-parser";
 import { useTheme } from "@/hooks/use-theme";
 
@@ -679,6 +680,7 @@ const createStyles = (colors: ReturnType<typeof useTheme>) =>
       color: colors.assistantText,
       fontSize: 15,
       lineHeight: 24,
+      fontFamily: FontFamilies.normal.ibmPlexSans,
     },
     textInline: {
       color: colors.assistantText,
@@ -704,6 +706,7 @@ const createStyles = (colors: ReturnType<typeof useTheme>) =>
       marginTop: 0,
       marginBottom: 0,
       letterSpacing: -0.3,
+      fontFamily: FontFamilies.display.spaceGrotesk,
     },
     header2: {
       fontSize: 21,
@@ -712,6 +715,7 @@ const createStyles = (colors: ReturnType<typeof useTheme>) =>
       marginTop: 0,
       marginBottom: 0,
       letterSpacing: -0.2,
+      fontFamily: FontFamilies.display.spaceGrotesk,
     },
     header3: {
       fontSize: 18,
@@ -719,6 +723,7 @@ const createStyles = (colors: ReturnType<typeof useTheme>) =>
       fontWeight: "600",
       marginTop: 0,
       marginBottom: 0,
+      fontFamily: FontFamilies.normal.ibmPlexSans,
     },
     listItem: {
       flexDirection: "row",
@@ -740,9 +745,10 @@ const createStyles = (colors: ReturnType<typeof useTheme>) =>
       minWidth: 28,
       paddingTop: 1,
       textAlign: "right",
+      fontFamily: FontFamilies.normal.ibmPlexSans,
     },
     taskMarker: {
-      fontFamily: "monospace",
+      fontFamily: FontFamilies.mono.jetBrainsMono,
       fontSize: 13,
     },
     orderedMarker: {
@@ -799,7 +805,7 @@ const createStyles = (colors: ReturnType<typeof useTheme>) =>
     },
     inlineCodeText: {
       color: colors.codeText,
-      fontFamily: "monospace",
+      fontFamily: FontFamilies.mono.jetBrainsMono,
       fontSize: 12.5,
       lineHeight: 18,
       includeFontPadding: false,

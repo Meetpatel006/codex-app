@@ -11,6 +11,7 @@ import {
 import { SafeAreaView } from "react-native-safe-area-context";
 import { LinearGradient } from "expo-linear-gradient";
 import { SymbolView } from "expo-symbols";
+import { FontFamilies } from "@/constants/fonts";
 import { useSessionStore } from "@/store/session";
 import { Gesture, GestureDetector } from "react-native-gesture-handler";
 import Animated, {
@@ -608,6 +609,7 @@ const createStyles = (colors: ReturnType<typeof useTheme>, isDark: boolean) =>
       fontWeight: "700",
       color: colors.text,
       letterSpacing: -0.8,
+      fontFamily: FontFamilies.display.spaceGrotesk,
     },
     countPill: {
       minWidth: 28,
@@ -624,6 +626,7 @@ const createStyles = (colors: ReturnType<typeof useTheme>, isDark: boolean) =>
       color: colors.text,
       fontSize: 12,
       fontWeight: "700",
+      fontFamily: FontFamilies.mono.jetBrainsMono,
     },
     headerActions: {
       flexDirection: "row",
@@ -661,11 +664,13 @@ const createStyles = (colors: ReturnType<typeof useTheme>, isDark: boolean) =>
       fontWeight: "600",
       letterSpacing: 0.2,
       textTransform: "uppercase",
+      fontFamily: FontFamilies.normal.ibmPlexSans,
     },
     sectionMeta: {
       fontSize: 13,
       color: colors.textSecondary,
       fontWeight: "500",
+      fontFamily: FontFamilies.normal.ibmPlexSans,
     },
     projectScroll: {
       flex: 1,
@@ -719,11 +724,13 @@ const createStyles = (colors: ReturnType<typeof useTheme>, isDark: boolean) =>
       fontSize: 17,
       color: colors.text,
       fontWeight: "600",
+      fontFamily: FontFamilies.normal.ibmPlexSans,
     },
     menuItemSubText: {
       fontSize: 12,
       color: colors.textSecondary,
       fontWeight: "500",
+      fontFamily: FontFamilies.normal.ibmPlexSans,
     },
     chevronShell: {
       width: 24,
@@ -768,6 +775,7 @@ const createStyles = (colors: ReturnType<typeof useTheme>, isDark: boolean) =>
       color: colors.textSecondary,
       fontWeight: "500",
       flex: 1,
+      fontFamily: FontFamilies.normal.ibmPlexSans,
     },
     chatItemTextActive: {
       color: colors.text,
@@ -779,6 +787,7 @@ const createStyles = (colors: ReturnType<typeof useTheme>, isDark: boolean) =>
       fontWeight: "500",
       paddingVertical: 6,
       paddingHorizontal: 10,
+      fontFamily: FontFamilies.normal.ibmPlexSans,
     },
     footer: {
       paddingHorizontal: Spacing.four,
@@ -802,16 +811,19 @@ const createStyles = (colors: ReturnType<typeof useTheme>, isDark: boolean) =>
       fontSize: 15,
       color: colors.text,
       fontWeight: "700",
+      fontFamily: FontFamilies.display.spaceGrotesk,
     },
     usageHint: {
       fontSize: 12,
       color: colors.textSecondary,
       fontWeight: "500",
+      fontFamily: FontFamilies.normal.ibmPlexSans,
     },
     usageEmptyText: {
       fontSize: 13,
       color: colors.textSecondary,
       fontWeight: "500",
+      fontFamily: FontFamilies.normal.ibmPlexSans,
     },
     limitsContainer: {
       gap: 12,
@@ -828,11 +840,13 @@ const createStyles = (colors: ReturnType<typeof useTheme>, isDark: boolean) =>
       fontSize: 13,
       color: colors.textSecondary,
       fontWeight: "600",
+      fontFamily: FontFamilies.normal.ibmPlexSans,
     },
     limitValue: {
       fontSize: 13,
       color: colors.text,
       fontWeight: "700",
+      fontFamily: FontFamilies.mono.jetBrainsMono,
     },
     progressBarBg: {
       height: 6,

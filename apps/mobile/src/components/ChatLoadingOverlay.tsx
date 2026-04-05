@@ -10,6 +10,7 @@ import Animated, {
   withTiming,
 } from "react-native-reanimated";
 
+import { FontFamilies } from "@/constants/fonts";
 import { useTheme } from "@/hooks/use-theme";
 
 const JOKES = [
@@ -100,9 +101,7 @@ export function ChatLoadingOverlay({
   // Page fades + scales down slightly on exit for a visible transition
   const pageAnimStyle = useAnimatedStyle(() => ({
     opacity: progress.value,
-    transform: [
-      { scale: interpolate(progress.value, [0, 1], [1.04, 1]) },
-    ],
+    transform: [{ scale: interpolate(progress.value, [0, 1], [1.04, 1]) }],
   }));
 
   // Content fades + slides up on exit
@@ -158,10 +157,7 @@ function hashString(value: string) {
   return hash;
 }
 
-const createStyles = (
-  colors: ReturnType<typeof useTheme>,
-  isDark: boolean,
-) =>
+const createStyles = (colors: ReturnType<typeof useTheme>, isDark: boolean) =>
   StyleSheet.create({
     page: {
       ...StyleSheet.absoluteFillObject,
@@ -182,7 +178,6 @@ const createStyles = (
       borderRadius: (SPINNER_SIZE + 20) / 2,
       alignItems: "center",
       justifyContent: "center",
-
     },
 
     subtitle: {
@@ -190,5 +185,6 @@ const createStyles = (
       fontSize: 14,
       lineHeight: 21,
       textAlign: "center",
+      fontFamily: FontFamilies.normal.ibmPlexSans,
     },
   });

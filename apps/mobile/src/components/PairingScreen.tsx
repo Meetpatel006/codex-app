@@ -3,6 +3,7 @@ import { Image, Pressable, StyleSheet, Text, View } from "react-native";
 import { useRouter } from "expo-router";
 
 import { QrCodeIcon } from "@/components/icons/Icon";
+import { FontFamilies } from "@/constants/fonts";
 import { getRandomPfpAsset } from "@/constants/pfp-assets";
 import { useTheme } from "@/hooks/use-theme";
 
@@ -17,7 +18,11 @@ export function PairingScreen() {
     <View style={styles.container}>
       <View style={styles.centerContent}>
         <View style={styles.pfpCard}>
-          <Image source={pfpImageSource} style={styles.pfpImage} resizeMode="cover" />
+          <Image
+            source={pfpImageSource}
+            style={styles.pfpImage}
+            resizeMode="cover"
+          />
         </View>
 
         <Text style={styles.username}>User</Text>
@@ -70,6 +75,7 @@ const createStyles = (theme: ReturnType<typeof useTheme>) =>
       color: theme.text,
       fontSize: 22,
       fontWeight: "600",
+      fontFamily: FontFamilies.display.spaceGrotesk,
     },
     scanButton: {
       flexDirection: "row",
@@ -87,15 +93,18 @@ const createStyles = (theme: ReturnType<typeof useTheme>) =>
       color: "#111111",
       fontSize: 18,
       fontWeight: "500",
+      fontFamily: FontFamilies.normal.ibmPlexSans,
     },
     termsCopy: {
       color: theme.textSecondary,
       fontSize: 15,
       lineHeight: 22,
       textAlign: "center",
+      fontFamily: FontFamilies.normal.ibmPlexSans,
     },
     linkText: {
       color: theme.text,
       textDecorationLine: "underline",
+      fontFamily: FontFamilies.normal.ibmPlexSans,
     },
   });

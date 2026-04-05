@@ -1,6 +1,7 @@
 import React, { useMemo, useState } from "react";
 import { Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
 import { TerminalIcon } from "./icons/Icon";
+import { FontFamilies } from "@/constants/fonts";
 import { useTheme } from "@/hooks/use-theme";
 
 type CommandExecutionStatus = "running" | "completed" | "failed" | "stopped";
@@ -14,16 +15,15 @@ type Props = {
   output?: string;
 };
 
-export function CommandExecutionCard({
-  command,
-  status,
-  output,
-}: Props) {
+export function CommandExecutionCard({ command, status, output }: Props) {
   const colors = useTheme();
   const themedStyles = useMemo(() => createStyles(colors), [colors]);
   const [expanded, setExpanded] = useState(false);
   const statusText = getStatusText(status);
-  const outputText = useMemo(() => buildOutputText(output, status), [output, status]);
+  const outputText = useMemo(
+    () => buildOutputText(output, status),
+    [output, status],
+  );
 
   return (
     <View style={themedStyles.container}>
@@ -32,7 +32,9 @@ export function CommandExecutionCard({
         onPress={() => setExpanded((value) => !value)}
         accessibilityRole="button"
         accessibilityState={{ expanded }}
-        accessibilityLabel={expanded ? "Collapse command output" : "Expand command output"}
+        accessibilityLabel={
+          expanded ? "Collapse command output" : "Expand command output"
+        }
       >
         <TerminalIcon size={16} color={colors.textSecondary} />
         <Text style={themedStyles.commandLabel} numberOfLines={1}>
@@ -66,7 +68,10 @@ function getStatusText(status: CommandExecutionStatus): string {
   }
 }
 
-function buildOutputText(output: string | undefined, status: CommandExecutionStatus) {
+function buildOutputText(
+  output: string | undefined,
+  status: CommandExecutionStatus,
+) {
   const normalizedOutput = output?.trim();
   if (normalizedOutput) {
     return sanitizeCommandOutput(normalizedOutput);
@@ -135,7 +140,7 @@ const createStyles = (colors: ReturnType<typeof useTheme>) =>
       color: colors.textSecondary,
       fontSize: 13,
       lineHeight: 18,
-      fontFamily: "monospace",
+      fontFamily: FontFamilies.mono.jetBrainsMono,
     },
     outputSection: {
       borderTopWidth: 1,
@@ -148,8 +153,7 @@ const createStyles = (colors: ReturnType<typeof useTheme>) =>
     outputText: {
       color: colors.codeText,
       fontSize: 13,
-      fontFamily: "monospace",
+      fontFamily: FontFamilies.mono.jetBrainsMono,
       lineHeight: 18,
     },
   });
-

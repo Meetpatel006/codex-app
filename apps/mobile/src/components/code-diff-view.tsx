@@ -1,7 +1,6 @@
 import React, { useEffect, useMemo, useState } from "react";
 import {
   Dimensions,
-  Platform,
   Pressable,
   ScrollView,
   StyleSheet,
@@ -14,6 +13,7 @@ import { BlurView } from "expo-blur";
 import { Image } from "expo-image";
 
 import { ThemedText } from "@/components/themed-text";
+import { FontFamilies } from "@/constants/fonts";
 import { useTheme } from "@/hooks/use-theme";
 import { relayService } from "@/services/relay";
 import { useDiffStore } from "@/store/diff";
@@ -558,7 +558,7 @@ const styles = StyleSheet.create({
     flex: 1,
     fontSize: 11,
     textAlign: "right",
-    fontFamily: Platform.OS === "ios" ? "Menlo" : "monospace",
+    fontFamily: FontFamilies.mono.jetBrainsMono,
     paddingRight: 8,
   },
   lineMarker: {
@@ -569,7 +569,7 @@ const styles = StyleSheet.create({
   codeText: {
     flex: 1,
     fontSize: 12,
-    fontFamily: Platform.OS === "ios" ? "Menlo" : "monospace",
+    fontFamily: FontFamilies.mono.jetBrainsMono,
     lineHeight: 18,
   },
   emptyState: {

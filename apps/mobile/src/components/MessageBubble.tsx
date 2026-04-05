@@ -9,6 +9,7 @@ import { ApprovalCard } from "./ApprovalCard";
 import { ApprovalStatusCard } from "./ApprovalStatusCard";
 import { MarkdownText } from "./MarkdownText";
 import { ThinkingIndicator, ThinkingText } from "./ThinkingIndicator";
+import { FontFamilies } from "@/constants/fonts";
 import {
   parseInlineMentions,
   parseMarkdownSegments,
@@ -284,19 +285,23 @@ const createStyles = (colors: ReturnType<typeof useTheme>) =>
       color: colors.userText,
       fontSize: 14,
       lineHeight: 20,
+      fontFamily: FontFamilies.normal.ibmPlexSans,
     },
     userFileMention: {
       color: colors.fileMention,
       fontWeight: "500",
+      fontFamily: FontFamilies.normal.ibmPlexSans,
     },
     userSkillMention: {
       color: colors.skillMention,
       fontWeight: "500",
+      fontFamily: FontFamilies.normal.ibmPlexSans,
     },
     deliveryStatus: {
       color: colors.systemText,
       fontSize: 11,
       marginTop: 4,
+      fontFamily: FontFamilies.normal.ibmPlexSans,
     },
     deliveryFailed: {
       color: colors.errorColor,
@@ -326,5 +331,6 @@ const createStyles = (colors: ReturnType<typeof useTheme>) =>
       color: colors.systemText,
       fontSize: 12,
       fontStyle: "italic",
+      fontFamily: FontFamilies.normal.ibmPlexSans,
     },
   });

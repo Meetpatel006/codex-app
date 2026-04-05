@@ -1,5 +1,6 @@
 import React from "react";
 import { StyleSheet, Text, View } from "react-native";
+import { FontFamilies } from "@/constants/fonts";
 
 type Props = {
   status: "online" | "offline" | "connecting";
@@ -35,5 +36,6 @@ const styles = StyleSheet.create({
     color: "#d0d0d0",
     fontSize: 12,
     textTransform: "capitalize",
+    fontFamily: FontFamilies.normal.ibmPlexSans,
   },
 });

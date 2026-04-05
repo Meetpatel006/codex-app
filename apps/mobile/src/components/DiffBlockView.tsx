@@ -1,5 +1,6 @@
 import React, { useMemo } from "react";
-import { Platform, Pressable, StyleSheet, Text, View } from "react-native";
+import { Pressable, StyleSheet, Text, View } from "react-native";
+import { FontFamilies } from "@/constants/fonts";
 import { DiffLineKind, parseDiffLine } from "@/utils/markdown-parser";
 import { useTheme } from "@/hooks/use-theme";
 
@@ -114,7 +115,7 @@ const createStyles = (colors: ReturnType<typeof useTheme>) =>
       color: colors.textSecondary,
       fontSize: 11,
       fontWeight: "700",
-      fontFamily: Platform.OS === "ios" ? "Menlo" : "monospace",
+      fontFamily: FontFamilies.mono.jetBrainsMono,
       textTransform: "uppercase",
       letterSpacing: 0.5,
     },
@@ -126,6 +127,7 @@ const createStyles = (colors: ReturnType<typeof useTheme>) =>
       color: colors.linkColor,
       fontSize: 12,
       fontWeight: "600",
+      fontFamily: FontFamilies.normal.ibmPlexSans,
     },
     diffContainer: {
       backgroundColor: colors.codeBackground,
@@ -138,7 +140,7 @@ const createStyles = (colors: ReturnType<typeof useTheme>) =>
     },
     lineText: {
       fontSize: 12,
-      fontFamily: Platform.OS === "ios" ? "Menlo" : "monospace",
+      fontFamily: FontFamilies.mono.jetBrainsMono,
       lineHeight: 18,
     },
     // Addition line (green)

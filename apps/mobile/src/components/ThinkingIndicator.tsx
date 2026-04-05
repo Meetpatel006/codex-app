@@ -1,10 +1,10 @@
 import React, { useEffect, useRef } from "react";
 import { Animated, Easing, StyleSheet, Text, View } from "react-native";
+import { FontFamilies } from "@/constants/fonts";
 
 type Props = {
   visible?: boolean;
 };
-
 
 export function ThinkingIndicator({ visible = true }: Props) {
   const opacity1 = useRef(new Animated.Value(0.3)).current;
@@ -124,5 +124,6 @@ const styles = StyleSheet.create({
     color: "#9f9f9f",
     fontSize: 14,
     fontStyle: "italic",
+    fontFamily: FontFamilies.normal.ibmPlexSans,
   },
 });

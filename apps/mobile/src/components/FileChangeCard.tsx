@@ -4,6 +4,7 @@ import { Image } from "expo-image";
 
 import { FolderIcon } from "@/components/icons/Icon";
 import { ThemedText } from "@/components/themed-text";
+import { FontFamilies } from "@/constants/fonts";
 import { useColorScheme } from "@/hooks/use-color-scheme";
 import { useTheme } from "@/hooks/use-theme";
 import type { FileChangeData } from "@/store/chat";
@@ -371,7 +372,7 @@ const createStyles = (colors: ReturnType<typeof useTheme>) =>
       color: colors.text,
       fontSize: 13,
       fontWeight: "700",
-      fontFamily: "monospace",
+      fontFamily: FontFamilies.mono.jetBrainsMono,
     },
     groupStats: {
       flexDirection: "row",
@@ -424,7 +425,7 @@ const createStyles = (colors: ReturnType<typeof useTheme>) =>
       color: colors.text,
       fontSize: 12,
       fontWeight: "700",
-      fontFamily: "monospace",
+      fontFamily: FontFamilies.mono.jetBrainsMono,
     },
     fileRight: {
       alignItems: "flex-end",

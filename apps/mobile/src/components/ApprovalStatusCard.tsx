@@ -1,6 +1,7 @@
 import React, { useMemo, useState } from "react";
 import { Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
 import { TerminalIcon } from "./icons/Icon";
+import { FontFamilies } from "@/constants/fonts";
 import { useTheme } from "@/hooks/use-theme";
 
 type ApprovalStatus = "approved" | "rejected" | "error";
@@ -105,7 +106,7 @@ const createStyles = (colors: ReturnType<typeof useTheme>) =>
       color: colors.textSecondary,
       fontSize: 13,
       lineHeight: 18,
-      fontFamily: "monospace",
+      fontFamily: FontFamilies.mono.jetBrainsMono,
     },
     outputSection: {
       borderTopWidth: 1,
@@ -119,6 +120,6 @@ const createStyles = (colors: ReturnType<typeof useTheme>) =>
       color: colors.codeText,
       fontSize: 13,
       lineHeight: 18,
-      fontFamily: "monospace",
+      fontFamily: FontFamilies.mono.jetBrainsMono,
     },
   });

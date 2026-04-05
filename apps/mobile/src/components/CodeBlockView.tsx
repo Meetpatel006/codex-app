@@ -1,5 +1,6 @@
 import React, { useMemo, useState } from "react";
 import { Clipboard, Pressable, StyleSheet, Text, View } from "react-native";
+import { FontFamilies } from "@/constants/fonts";
 import { useTheme } from "@/hooks/use-theme";
 
 type Props = {
@@ -60,7 +61,7 @@ const createStyles = (colors: ReturnType<typeof useTheme>) =>
     languageLabel: {
       color: colors.textSecondary,
       fontSize: 12,
-      fontFamily: "monospace",
+      fontFamily: FontFamilies.mono.jetBrainsMono,
       textTransform: "lowercase",
     },
     copyButton: {
@@ -71,6 +72,7 @@ const createStyles = (colors: ReturnType<typeof useTheme>) =>
       color: colors.successColor,
       fontSize: 12,
       fontWeight: "600",
+      fontFamily: FontFamilies.normal.ibmPlexSans,
     },
     codeContainer: {
       backgroundColor: colors.codeBackground,
@@ -80,7 +82,7 @@ const createStyles = (colors: ReturnType<typeof useTheme>) =>
     code: {
       color: colors.codeText,
       fontSize: 13,
-      fontFamily: "monospace",
+      fontFamily: FontFamilies.mono.jetBrainsMono,
       lineHeight: 20,
     },
   });

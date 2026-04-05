@@ -11,6 +11,7 @@ import { CameraView, useCameraPermissions } from "expo-camera";
 import Constants from "expo-constants";
 import { useRouter } from "expo-router";
 
+import { FontFamilies } from "@/constants/fonts";
 import { useSessionStore } from "@/store/session";
 import { useTheme } from "@/hooks/use-theme";
 
@@ -245,6 +246,7 @@ const createStyles = (theme: ReturnType<typeof useTheme>) =>
       color: "#fff",
       fontSize: 15,
       fontWeight: "600",
+      fontFamily: FontFamilies.normal.ibmPlexSans,
     },
     guideBox: {
       marginHorizontal: 16,
@@ -260,11 +262,13 @@ const createStyles = (theme: ReturnType<typeof useTheme>) =>
       fontSize: 17,
       fontWeight: "700",
       marginBottom: 6,
+      fontFamily: FontFamilies.display.spaceGrotesk,
     },
     guideText: {
       color: "#f0f0f0",
       fontSize: 14,
       lineHeight: 20,
+      fontFamily: FontFamilies.normal.ibmPlexSans,
     },
     centerContent: {
       flex: 1,
@@ -278,12 +282,14 @@ const createStyles = (theme: ReturnType<typeof useTheme>) =>
       fontSize: 20,
       fontWeight: "700",
       marginBottom: 8,
+      fontFamily: FontFamilies.display.spaceGrotesk,
     },
     subtitle: {
       color: theme.textSecondary,
       fontSize: 14,
       textAlign: "center",
       marginBottom: 24,
+      fontFamily: FontFamilies.normal.ibmPlexSans,
     },
     button: {
       borderRadius: 14,
@@ -296,5 +302,6 @@ const createStyles = (theme: ReturnType<typeof useTheme>) =>
       color: theme.userText,
       fontSize: 15,
       fontWeight: "600",
+      fontFamily: FontFamilies.normal.ibmPlexSans,
     },
   });
