@@ -15,12 +15,24 @@ env:
 
 jobs:
   build-android:
-    name: Build Android (EAS)
+    name: Build Android APK
     runs-on: ubuntu-latest
 
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+
+      - name: Enable long paths
+        run: git config --global core.longpaths true
+
+      - name: Setup JDK
+        uses: actions/setup-java@v4
+        with:
+          distribution: "zulu"
+          java-version: "23"
+
+      - name: Setup Android SDK
+        uses: android-actions/setup-android@v3
 
       - name: Setup Bun
         uses: oven-sh/setup-bun@v2
@@ -30,30 +42,21 @@ jobs:
       - name: Install dependencies
         run: bun install --frozen-lockfile
 
-      - name: Setup Expo
-        uses: expo/expo-github-action@v8
-        with:
-          eas-version: latest
-          token: ${{ secrets.EXPO_TOKEN }}
-          packager: bun
+      - name: Generate native project
+        run: bunx expo prebuild --platform android --clean
+        working-directory: apps/mobile
 
-      - name: Build Android with EAS
+      - name: Build Android APK
         run: |
-          eas build --platform android --profile release --non-interactive
-        env:
-          EXPO_TOKEN: ${{ secrets.EXPO_TOKEN }}
-
-      - name: Download Artifacts
-        uses: actions/download-artifact@v4
-        with:
-          name: android-build
-          path: ./android-build
+          cd apps/mobile/android
+          chmod +x gradlew
+          ./gradlew assembleRelease -x lint -x test --no-daemon -Dorg.gradle.jvmargs="-Xmx4g"
 
       - name: Upload APK
         uses: actions/upload-artifact@v4
         with:
           name: mobile-apk-${{ github.run_number }}
-          path: ./android-build/*.apk
+          path: apps/mobile/android/app/build/outputs/apk/release/*.apk
           retention-days: 30
 
   create-release:
