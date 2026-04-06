@@ -2,13 +2,11 @@ name: Mobile App CI/CD
 
 on:
   push:
-    branches:
-      - main
     tags:
       - "v*"
-  pull_request:
-    branches:
-      - main
+
+permissions:
+  contents: write
 
 env:
   BUN_VERSION: "1.2"
