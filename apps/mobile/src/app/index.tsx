@@ -20,7 +20,7 @@ import { PromptInput } from "@/components/prompt-input";
 import { ChatHeader } from "@/components/chat-header";
 import { CodeDiffView } from "@/components/code-diff-view";
 import { EmptyChatState } from "@/components/EmptyChatState";
-import { GitCommitView } from "@/components/git-commit-view";
+import { GitPanel } from "@/components/git/GitPanel";
 import { BottomSheet } from "@/components/ui/bottom-sheet";
 import { SidePanel } from "@/components/ui/side-panel";
 import { buildRequest } from "@/services/jsonrpc";
@@ -1111,14 +1111,7 @@ export default function ChatScreen() {
   const setActiveProject = useSessionStore((state) => state.setActiveProject);
   const setActiveSession = useSessionStore((state) => state.setActiveSession);
   const [sidebarOpen, setSidebarOpen] = useState(false);
-  const [commitSheetOpen, setCommitSheetOpen] = useState(false);
   const [isConnected, setIsConnected] = useState(false);
-  const [commitStatusText, setCommitStatusText] = useState("");
-  const [commitSubmitting, setCommitSubmitting] = useState(false);
-  const [commitBranch, setCommitBranch] = useState("-");
-  const [commitChangedFiles, setCommitChangedFiles] = useState(0);
-  const [commitAdditions, setCommitAdditions] = useState(0);
-  const [commitDeletions, setCommitDeletions] = useState(0);
   const [threadUsageByThreadId, setThreadUsageByThreadId] = useState<
     Record<string, ThreadUsageSnapshot>
   >({});
@@ -1131,6 +1124,7 @@ export default function ChatScreen() {
   const isDiffPanelOpen = useUiStore((state) => state.isDiffPanelOpen);
   const openDiffPanel = useUiStore((state) => state.openDiffPanel);
   const closeDiffPanel = useUiStore((state) => state.closeDiffPanel);
+  const [isGitPanelOpen, setIsGitPanelOpen] = useState(false);
 
   const setRuntimeOptions = useRuntimeOptionsStore((state) => state.setOptions);
   const setRuntimeOptionsLoading = useRuntimeOptionsStore(
@@ -1325,84 +1319,6 @@ export default function ChatScreen() {
   useEffect(() => {
     setActiveDiffSession(activeSessionId);
   }, [activeSessionId, setActiveDiffSession]);
-
-  const loadCommitStatus = useCallback(async () => {
-    if (!gitCwd || !relayService.isSecureReady()) {
-      setCommitStatusText("Git status unavailable for current project.");
-      return;
-    }
-
-    try {
-      setCommitStatusText("Loading repository status...");
-      const status = await requestGitStatus(gitCwd);
-      const files = status?.files || [];
-      const diff = status?.diff || {};
-
-      setCommitBranch((status?.branch || "-").trim() || "-");
-      setCommitChangedFiles(files.length);
-      setCommitAdditions(Number(diff.additions || 0));
-      setCommitDeletions(Number(diff.deletions || 0));
-      setCommitStatusText("");
-    } catch (error) {
-      setCommitStatusText(
-        error instanceof Error ? error.message : "Failed to load git status.",
-      );
-    }
-  }, [gitCwd]);
-
-  useEffect(() => {
-    if (!commitSheetOpen) {
-      return;
-    }
-
-    void loadCommitStatus();
-  }, [commitSheetOpen, loadCommitStatus]);
-
-  const runCommit = useCallback(
-    async (payload: {
-      message: string;
-      includeUnstaged: boolean;
-      draft: boolean;
-      nextStep: "commit" | "push";
-    }) => {
-      if (!gitCwd) {
-        setCommitStatusText("Git commit requires an active project path.");
-        return;
-      }
-
-      setCommitSubmitting(true);
-      setCommitStatusText("Running commit...");
-
-      try {
-        await relayService.requestJson("git/commit", {
-          cwd: gitCwd,
-          message: payload.message,
-          includeUnstaged: payload.includeUnstaged,
-          draft: payload.draft,
-        });
-
-        if (payload.nextStep === "push") {
-          setCommitStatusText("Commit complete. Pushing...");
-          await relayService.requestJson("git/push", { cwd: gitCwd });
-        }
-
-        setCommitStatusText(
-          payload.nextStep === "push"
-            ? "Commit and push completed."
-            : "Commit completed.",
-        );
-        await loadCommitStatus();
-        setCommitSheetOpen(false);
-      } catch (error) {
-        setCommitStatusText(
-          error instanceof Error ? error.message : "Commit failed.",
-        );
-      } finally {
-        setCommitSubmitting(false);
-      }
-    },
-    [gitCwd, loadCommitStatus],
-  );
 
   const refreshCodexSessions = useCallback(
     async (options?: {
@@ -2860,7 +2776,7 @@ export default function ChatScreen() {
 
           <ChatHeader
             onOpenSidebar={() => setSidebarOpen(true)}
-            onOpenCommitSheet={() => setCommitSheetOpen(true)}
+            onOpenCommitSheet={() => setIsGitPanelOpen(true)}
             onOpenDiffPanel={openDiffPanel}
           />
 
@@ -2982,25 +2898,15 @@ export default function ChatScreen() {
         </SafeAreaView>
       </ProjectSidebar>
 
-      <BottomSheet
-        isVisible={commitSheetOpen}
-        onClose={() => setCommitSheetOpen(false)}
-      >
-        <GitCommitView
-          branch={commitBranch}
-          changedFiles={commitChangedFiles}
-          additions={commitAdditions}
-          deletions={commitDeletions}
-          isSubmitting={commitSubmitting}
-          statusText={commitStatusText}
-          onCommit={(payload) => {
-            void runCommit(payload);
-          }}
-        />
-      </BottomSheet>
-
       <SidePanel isVisible={isDiffPanelOpen} onClose={closeDiffPanel}>
         <CodeDiffView onClose={closeDiffPanel} />
+      </SidePanel>
+
+      <SidePanel
+        isVisible={isGitPanelOpen}
+        onClose={() => setIsGitPanelOpen(false)}
+      >
+        <GitPanel onClose={() => setIsGitPanelOpen(false)} />
       </SidePanel>
     </>
   );

@@ -60,6 +60,12 @@ export const Colors = {
     successColor: "#1E7E34",
     errorColor: "#C62828",
     warningColor: "#F57C00",
+    // Git colors (Lunel-style)
+    gitAdded: "#22c55e",
+    gitModified: "#f59e0b",
+    gitDeleted: "#ef4444",
+    gitInfo: "#3b82f6",
+    accent: "#6161F2",
   },
   dark: {
     text: "#ffffff",
@@ -95,6 +101,11 @@ export const Colors = {
     successColor: "#6fdc8c",
     errorColor: "#ff9d9d",
     warningColor: "#ffb86c",
+    gitAdded: "#4ade80",
+    gitModified: "#fbbf24",
+    gitDeleted: "#f87171",
+    gitInfo: "#60a5fa",
+    accent: "#6161F2",
   },
 } as const;
 
