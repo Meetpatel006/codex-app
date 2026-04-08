@@ -98,6 +98,22 @@ export class RelayService {
   }
 
   async connect(options: ConnectOptions) {
+    const hasSameActiveSession =
+      this.activeOptions?.relayUrl === options.relayUrl &&
+      this.activeOptions?.sessionId === options.sessionId &&
+      this.activeOptions?.identityPrivateKeyHex === options.identityPrivateKeyHex &&
+      this.activeOptions?.bridgeIdentityPublicKey ===
+        options.bridgeIdentityPublicKey;
+
+    if (
+      hasSameActiveSession &&
+      this.socket &&
+      (this.socket.readyState === WebSocket.CONNECTING ||
+        this.socket.readyState === WebSocket.OPEN)
+    ) {
+      return;
+    }
+
     this.activeOptions = options;
     this.emit("presence", "connecting");
 
@@ -542,6 +558,10 @@ export class RelayService {
       this.macToPhoneKey != null &&
       this.socket?.readyState === WebSocket.OPEN
     );
+  }
+
+  getActiveSessionId() {
+    return this.activeOptions?.sessionId || null;
   }
 
   async ensureIdentityPair(): Promise<{

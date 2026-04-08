@@ -19,6 +19,7 @@ const TRUSTED_SESSION_RESOLVE_SKEW_MS = 90_000;
 const sessions = new Map();
 const liveSessionsByMacDeviceId = new Map();
 const usedResolveNonces = new Map();
+const shortCodeToSessionMap = new Map();
 
 // Attaches relay behavior to a ws WebSocketServer instance.
 function setupRelay(
@@ -383,6 +384,59 @@ function resolveTrustedMacSession({
   };
 }
 
+// Resolves a short pairing code to the full pairing payload
+function resolveShortCode({ shortCode, now = Date.now() } = {}) {
+  const normalizedCode = normalizeNonEmptyString(shortCode).toUpperCase();
+
+  if (!normalizedCode || normalizedCode.length !== 8) {
+    throw createRelayError(400, "invalid_code", "Invalid short code format.");
+  }
+
+  pruneExpiredShortCodes(now);
+
+  const mapping = shortCodeToSessionMap.get(normalizedCode);
+  if (!mapping) {
+    throw createRelayError(
+      404,
+      "code_not_found",
+      "Short code not found or expired.",
+    );
+  }
+
+  if (now >= mapping.expiresAt) {
+    shortCodeToSessionMap.delete(normalizedCode);
+    throw createRelayError(404, "code_expired", "Short code has expired.");
+  }
+
+  // Verify the session is still active
+  if (!hasActiveMacSession(mapping.sessionId)) {
+    shortCodeToSessionMap.delete(normalizedCode);
+    throw createRelayError(
+      404,
+      "session_unavailable",
+      "Mac session is no longer available.",
+    );
+  }
+
+  return {
+    ok: true,
+    v: 2,
+    relay: mapping.relayUrl || "",
+    sessionId: mapping.sessionId,
+    macDeviceId: mapping.macDeviceId,
+    macIdentityPublicKey: mapping.macIdentityPublicKey,
+    expiresAt: mapping.expiresAt,
+  };
+}
+
+function pruneExpiredShortCodes(now = Date.now()) {
+  for (const [code, mapping] of shortCodeToSessionMap.entries()) {
+    if (now >= mapping.expiresAt) {
+      shortCodeToSessionMap.delete(code);
+    }
+  }
+}
+
 // Exposes lightweight runtime stats for health/status endpoints.
 function getRelayStats() {
   let totalClients = 0;
@@ -437,6 +491,32 @@ function applyMacRegistrationMessage(session, sessionId, rawMessage) {
 
   session.macRegistration = normalizeMacRegistration(parsed.registration, sessionId);
   registerLiveMacSession(session.macRegistration);
+
+  // Store short code mapping if present
+  if (
+    parsed.registration?.shortCode &&
+    typeof parsed.registration.shortCode === "string" &&
+    parsed.registration?.pairingPayload &&
+    typeof parsed.registration.pairingPayload === "object"
+  ) {
+    const shortCode = parsed.registration.shortCode.trim().toUpperCase();
+    const pairingPayload = parsed.registration.pairingPayload;
+
+    if (
+      shortCode.length === 8 &&
+      pairingPayload.relay &&
+      pairingPayload.sessionId
+    ) {
+      shortCodeToSessionMap.set(shortCode, {
+        sessionId,
+        macDeviceId: session.macRegistration.macDeviceId,
+        macIdentityPublicKey: session.macRegistration.macIdentityPublicKey,
+        expiresAt: pairingPayload.expiresAt || Date.now() + 5 * 60 * 1000,
+        relayUrl: pairingPayload.relay,
+      });
+    }
+  }
+
   return true;
 }
 
@@ -569,4 +649,5 @@ module.exports = {
   hasActiveMacSession,
   hasAuthenticatedMacSession,
   resolveTrustedMacSession,
+  resolveShortCode,
 };

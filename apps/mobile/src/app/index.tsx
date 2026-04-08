@@ -5,7 +5,7 @@ import React, {
   useRef,
   useState,
 } from "react";
-import { ScrollView, StyleSheet } from "react-native";
+import { Pressable, ScrollView, StyleSheet, Text } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 
 import { MessageBubble } from "@/components/MessageBubble";
@@ -16,6 +16,8 @@ import {
   type SidebarUsageItem,
 } from "@/components/ProjectSidebar";
 import { PairingScreen } from "@/components/PairingScreen";
+import { ConnectingScreen } from "@/components/ConnectingScreen";
+import { ConnectionErrorScreen } from "@/components/ConnectionErrorScreen";
 import { PromptInput } from "@/components/prompt-input";
 import { ChatHeader } from "@/components/chat-header";
 import { CodeDiffView } from "@/components/code-diff-view";
@@ -192,6 +194,10 @@ type AccountUsageSnapshot = {
   windows: RateLimitWindowSnapshot[];
   updatedAt: number;
 };
+
+const PAIRING_CONNECT_TIMEOUT_MS = 15_000;
+const PAIRING_FAILURE_REDIRECT_MS = 2_500;
+let bootstrappedReadySessionId: string | null = null;
 
 function normalizeEventToken(value: unknown) {
   return typeof value === "string"
@@ -1087,14 +1093,23 @@ export default function ChatScreen() {
     new Map<string, ApprovalRequestData>(),
   );
   const codexInitializedRef = useRef(false);
+  const initializePromiseRef = useRef<Promise<boolean> | null>(null);
   const threadStartPromiseRef = useRef<Promise<string | null> | null>(null);
   const threadStartRequestSeqRef = useRef(0);
   const pendingFreshThreadIdsRef = useRef(new Set<string>());
   const delayedSessionRefreshTimersRef = useRef(
     new Set<ReturnType<typeof setTimeout>>(),
   );
+  const pairingAttemptKeyRef = useRef<string | null>(null);
+  const pairingConnectTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(
+    null,
+  );
+  const resolvedSessionIdRef = useRef<string | null>(null);
+  const pairingTransitionLogRef = useRef<string | null>(null);
+  const suppressPresenceFailureRef = useRef(false);
 
   const pairing = useSessionStore((state) => state.pairing);
+  const pairingFlow = useSessionStore((state) => state.pairingFlow);
   const loadSession = useSessionStore((state) => state.load);
   const privateKey = useSessionStore(
     (state) => state.mobileIdentityPrivateKeyHex,
@@ -1104,6 +1119,11 @@ export default function ChatScreen() {
   );
   const setIdentity = useSessionStore((state) => state.setMobileIdentity);
   const setPairing = useSessionStore((state) => state.setPairing);
+  const markPairingConnected = useSessionStore(
+    (state) => state.markPairingConnected,
+  );
+  const markPairingFailed = useSessionStore((state) => state.markPairingFailed);
+  const resetPairingFlow = useSessionStore((state) => state.resetPairingFlow);
   const replaceProjects = useSessionStore((state) => state.replaceProjects);
   const projects = useSessionStore((state) => state.projects);
   const activeProjectId = useSessionStore((state) => state.activeProjectId);
@@ -1111,7 +1131,10 @@ export default function ChatScreen() {
   const setActiveProject = useSessionStore((state) => state.setActiveProject);
   const setActiveSession = useSessionStore((state) => state.setActiveSession);
   const [sidebarOpen, setSidebarOpen] = useState(false);
-  const [isConnected, setIsConnected] = useState(false);
+  const [, setIsConnected] = useState(false);
+  const [sessionLoaded, setSessionLoaded] = useState(false);
+  const [showScrollToBottom, setShowScrollToBottom] = useState(false);
+  const messageScrollViewRef = useRef<ScrollView | null>(null);
   const [threadUsageByThreadId, setThreadUsageByThreadId] = useState<
     Record<string, ThreadUsageSnapshot>
   >({});
@@ -1214,6 +1237,28 @@ export default function ChatScreen() {
     }
   }, [setModelOptions]);
 
+  const clearPairingConnectTimeout = useCallback(() => {
+    if (pairingConnectTimeoutRef.current) {
+      clearTimeout(pairingConnectTimeoutRef.current);
+      pairingConnectTimeoutRef.current = null;
+    }
+  }, []);
+
+  const failPairing = useCallback(
+    async (message: string, options?: { expired?: boolean }) => {
+      clearPairingConnectTimeout();
+      pairingAttemptKeyRef.current = null;
+      resolvedSessionIdRef.current = null;
+      initializePromiseRef.current = null;
+      codexInitializedRef.current = false;
+      bootstrappedReadySessionId = null;
+      setIsConnected(false);
+      markPairingFailed(message, options);
+      relayService.disconnect();
+    },
+    [clearPairingConnectTimeout, markPairingFailed],
+  );
+
   const ensureCodexInitialized = useCallback(async () => {
     if (!relayService.isSecureReady()) {
       return false;
@@ -1223,30 +1268,48 @@ export default function ChatScreen() {
       return true;
     }
 
-    try {
-      await relayService.requestJson<{ bridgeManaged?: boolean }>(
-        "initialize",
-        {
-          protocolVersion: "2024-11-05",
-          capabilities: {
-            experimentalApi: true,
-          },
-          clientInfo: {
-            name: "remodex-mobile",
-            version: "1.0.0",
-          },
-        },
-        20_000,
-      );
-      console.log("[mobile][initialize] initialize response received");
-      await relayService.sendJson(buildRequest("initialized", {}));
-      codexInitializedRef.current = true;
-      console.log("[mobile][initialize] codex protocol initialized");
-      return true;
-    } catch (error) {
-      console.warn("[mobile][initialize] failed", error);
-      return false;
+    if (initializePromiseRef.current) {
+      return initializePromiseRef.current;
     }
+
+    const initializePromise = (async () => {
+      try {
+        await relayService.requestJson<{ bridgeManaged?: boolean }>(
+          "initialize",
+          {
+            protocolVersion: "2024-11-05",
+            capabilities: {
+              experimentalApi: true,
+            },
+            clientInfo: {
+              name: "remodex-mobile",
+              version: "1.0.0",
+            },
+          },
+          20_000,
+        );
+        console.log("[mobile][initialize] initialize response received");
+        await relayService.sendJson(buildRequest("initialized", {}));
+        codexInitializedRef.current = true;
+        console.log("[mobile][initialize] codex protocol initialized");
+        return true;
+      } catch (error) {
+        const message =
+          error instanceof Error ? error.message : String(error || "");
+        if (message.toLowerCase().includes("already initialized")) {
+          codexInitializedRef.current = true;
+          console.log("[mobile][initialize] already initialized");
+          return true;
+        }
+        console.warn("[mobile][initialize] failed", error);
+        return false;
+      } finally {
+        initializePromiseRef.current = null;
+      }
+    })();
+
+    initializePromiseRef.current = initializePromise;
+    return initializePromise;
   }, []);
 
   const messages = useChatStore((state) => state.messages);
@@ -1304,8 +1367,26 @@ export default function ChatScreen() {
   );
 
   useEffect(() => {
-    void loadSession();
+    void loadSession().then(() => setSessionLoaded(true));
   }, [loadSession]);
+
+  useEffect(() => {
+    const transitionKey = [
+      pairingFlow.status,
+      pairingFlow.sessionId || "none",
+      pairingFlow.error || "none",
+    ].join("|");
+    if (pairingTransitionLogRef.current === transitionKey) {
+      return;
+    }
+
+    pairingTransitionLogRef.current = transitionKey;
+    console.log("[mobile][pairing/state]", {
+      status: pairingFlow.status,
+      sessionId: pairingFlow.sessionId,
+      error: pairingFlow.error,
+    });
+  }, [pairingFlow.error, pairingFlow.sessionId, pairingFlow.status]);
 
   useEffect(() => {
     void loadRuntimeSelections().catch((error) => {
@@ -1378,6 +1459,25 @@ export default function ChatScreen() {
 
       if (preservedActiveSessionId) {
         nextActiveSessionId = preservedActiveSessionId;
+      }
+
+      const normalizedStoredActiveSessionId = normalizeThreadReference(
+        nextActiveSessionId,
+      );
+      if (normalizedStoredActiveSessionId) {
+        const projectContainingActiveSession =
+          mappedProjects.find((project) =>
+            project.sessions.some(
+              (session) =>
+                normalizeThreadReference(session.id) ===
+                normalizedStoredActiveSessionId,
+            ),
+          ) || null;
+
+        if (projectContainingActiveSession) {
+          nextActiveProjectId = projectContainingActiveSession.id;
+          nextActiveSessionId = normalizedStoredActiveSessionId;
+        }
       }
 
       if (
@@ -1749,26 +1849,76 @@ export default function ChatScreen() {
 
   useEffect(() => {
     const onError = relayService.on("error", (error) => {
-      console.warn("[mobile][relay/error]", error?.message || String(error));
+      const message = error?.message || String(error);
+      const currentPairingStatus = useSessionStore.getState().pairingFlow.status;
+      console.warn("[mobile][relay/error]", message);
       if (
-        error instanceof Error &&
-        error.message.toLowerCase().includes("relay disconnected")
+        currentPairingStatus === "connecting" ||
+        currentPairingStatus === "connected"
       ) {
-        setIsConnected(false);
+        void failPairing(message, {
+          expired: message.toLowerCase().includes("expired"),
+        });
       }
     });
 
     const onPresence = relayService.on("presence", (presence) => {
+      const currentPairingStatus = useSessionStore.getState().pairingFlow.status;
       setIsConnected(presence === "online");
       if (presence !== "online") {
         codexInitializedRef.current = false;
+        initializePromiseRef.current = null;
+        bootstrappedReadySessionId = null;
+      }
+      if (
+        presence === "offline" &&
+        !suppressPresenceFailureRef.current &&
+        currentPairingStatus === "connected"
+      ) {
+        void failPairing("Relay disconnected.");
       }
     });
 
     const onReady = relayService.on("ready", () => {
+      const activeRelaySessionId = relayService.getActiveSessionId();
+      if (!activeRelaySessionId) {
+        return;
+      }
+
+      if (bootstrappedReadySessionId === activeRelaySessionId) {
+        console.log("[mobile][ready] duplicate ready ignored", {
+          sessionId: activeRelaySessionId,
+        });
+        return;
+      }
+
+      bootstrappedReadySessionId = activeRelaySessionId;
       setIsConnected(true);
       codexInitializedRef.current = false;
+      initializePromiseRef.current = null;
       void (async () => {
+        const initialized = await ensureCodexInitialized();
+        if (!initialized) {
+          await failPairing("Codex initialize failed.");
+          return;
+        }
+
+        clearPairingConnectTimeout();
+        const nextSessionId =
+          resolvedSessionIdRef.current || useSessionStore.getState().pairing?.sessionId || null;
+        const currentPairing = useSessionStore.getState().pairing;
+        if (
+          currentPairing &&
+          nextSessionId &&
+          nextSessionId !== currentPairing.sessionId
+        ) {
+          await setPairing({
+            ...currentPairing,
+            sessionId: nextSessionId,
+          });
+        }
+        markPairingConnected(nextSessionId);
+
         void refreshCodexSessions().catch((error) => {
           console.warn("[mobile][codex/sessions/list] refresh failed", error);
         });
@@ -1778,11 +1928,6 @@ export default function ChatScreen() {
             error,
           );
         });
-
-        const initialized = await ensureCodexInitialized();
-        if (!initialized) {
-          return;
-        }
 
         void refreshUsageStatus(activeSessionId).catch((error) => {
           console.warn("[mobile][usage/refresh] initial refresh failed", error);
@@ -2348,8 +2493,12 @@ export default function ChatScreen() {
     ensureCodexInitialized,
     fetchCodexModelOptions,
     fetchCodexModelOptionsFallback,
+    failPairing,
     refreshUsageStatus,
+    clearPairingConnectTimeout,
+    markPairingConnected,
     scheduleDelayedSessionRefresh,
+    setPairing,
     setActiveSession,
     setDiffSnapshot,
   ]);
@@ -2364,7 +2513,7 @@ export default function ChatScreen() {
   }, [activeSessionId, refreshUsageStatus]);
 
   useEffect(() => {
-    if (!pairing) {
+    if (!pairing || pairingFlow.status !== "connected") {
       return;
     }
 
@@ -2382,14 +2531,49 @@ export default function ChatScreen() {
     return () => {
       clearTimeout(retryTimer);
     };
-  }, [pairing, projects, refreshCodexSessions]);
+  }, [pairing, pairingFlow.status, projects, refreshCodexSessions]);
 
   useEffect(() => {
     async function connect() {
-      if (!pairing) {
-        setIsConnected(false);
+      if (!sessionLoaded) {
         return;
       }
+
+      if (pairingFlow.status !== "connecting" || !pairing) {
+        clearPairingConnectTimeout();
+        pairingAttemptKeyRef.current = null;
+        resolvedSessionIdRef.current = null;
+        if (!pairing) {
+          setIsConnected(false);
+        }
+        return;
+      }
+
+      if (pairing.expiryMs <= Date.now()) {
+        await failPairing("Pairing QR has expired. Please generate a new one.", {
+          expired: true,
+        });
+        return;
+      }
+
+      const attemptKey = `${pairing.sessionId}:${pairing.expiryMs}`;
+      if (pairingAttemptKeyRef.current === attemptKey) {
+        return;
+      }
+
+      pairingAttemptKeyRef.current = attemptKey;
+      resolvedSessionIdRef.current = null;
+      initializePromiseRef.current = null;
+      codexInitializedRef.current = false;
+      suppressPresenceFailureRef.current = true;
+      relayService.disconnect();
+      suppressPresenceFailureRef.current = false;
+      setIsConnected(false);
+
+      clearPairingConnectTimeout();
+      pairingConnectTimeoutRef.current = setTimeout(() => {
+        void failPairing("Connection timed out. Please scan a new QR code.");
+      }, PAIRING_CONNECT_TIMEOUT_MS);
 
       let identityPrivate = privateKey;
       let identityPublic = publicKey;
@@ -2425,72 +2609,67 @@ export default function ChatScreen() {
             return null;
           }
 
-          if (nextSessionId !== pairing.sessionId) {
-            await setPairing({
-              ...pairing,
-              sessionId: nextSessionId,
-            });
-          }
-
+          resolvedSessionIdRef.current = nextSessionId;
           return nextSessionId;
         } catch {
           return null;
         }
       };
 
-      const connectWithSession = async (sessionId: string) => {
-        await relayService.connect({
-          relayUrl: pairing.relayUrl,
-          sessionId,
-          identityPrivateKeyHex: identityPrivate,
-          bridgeIdentityPublicKey: pairing.bridgeIdentityPublicKey,
-          resolveSessionId,
-        });
-      };
+      const sessionIdToUse =
+        (await resolveSessionId()) ||
+        resolvedSessionIdRef.current ||
+        pairing.sessionId;
 
-      let sessionIdToUse = pairing.sessionId;
-      const resolvedSessionId = await resolveSessionId();
-      if (resolvedSessionId) {
-        sessionIdToUse = resolvedSessionId;
+      if (!sessionIdToUse) {
+        await failPairing(
+          "No live pairing session was available. Please scan a new QR code.",
+        );
+        return;
       }
 
-      if (pairing.expiryMs < Date.now()) {
-        if (!resolvedSessionId) {
-          setIsConnected(false);
-          return;
-        }
-      }
-
-      try {
-        await connectWithSession(sessionIdToUse);
-      } catch {
-        const retriedSessionId = await resolveSessionId();
-        if (!retriedSessionId) {
-          throw new Error(
-            "Unable to connect and trusted resolve did not return a live session.",
-          );
-        }
-
-        await connectWithSession(retriedSessionId);
-      }
+      await relayService.connect({
+        relayUrl: pairing.relayUrl,
+        sessionId: sessionIdToUse,
+        identityPrivateKeyHex: identityPrivate,
+        bridgeIdentityPublicKey: pairing.bridgeIdentityPublicKey,
+        resolveSessionId,
+      });
     }
 
     void connect().catch((error) => {
       console.warn("[mobile][relay/connect] failed", error);
-      setIsConnected(false);
+      void failPairing(
+        error instanceof Error ? error.message : "Connection failed",
+        {
+          expired: String(
+            error instanceof Error ? error.message : error,
+          ).toLowerCase().includes("expired"),
+        },
+      );
     });
-  }, [pairing, privateKey, publicKey, setIdentity, setPairing]);
+  }, [
+    sessionLoaded,
+    clearPairingConnectTimeout,
+    failPairing,
+    pairing,
+    pairingFlow.status,
+    privateKey,
+    publicKey,
+    setIdentity,
+  ]);
 
   useEffect(() => {
     const delayedRefreshTimers = delayedSessionRefreshTimersRef.current;
     return () => {
+      clearPairingConnectTimeout();
       delayedRefreshTimers.forEach((timer) => {
         clearTimeout(timer);
       });
       delayedRefreshTimers.clear();
       relayService.disconnect();
     };
-  }, []);
+  }, [clearPairingConnectTimeout]);
 
   const handleApproveRequest = useCallback(
     async (approvalRequest: ApprovalRequestData | undefined) => {
@@ -2726,7 +2905,45 @@ export default function ChatScreen() {
     }
   }
 
-  if (!pairing || !isConnected) {
+  const scrollToBottom = useCallback((animated = true) => {
+    messageScrollViewRef.current?.scrollToEnd({ animated });
+    setShowScrollToBottom(false);
+  }, []);
+
+  const showConnectingScreen = pairingFlow.status === "connecting";
+
+  if (showConnectingScreen) {
+    return <ConnectingScreen />;
+  }
+
+  if (pairingFlow.status === "failed" || pairingFlow.status === "expired") {
+    return (
+      <ConnectionErrorScreen
+        title={
+          pairingFlow.status === "expired" ? "Pairing Expired" : "Connection Failed"
+        }
+        error={
+          pairingFlow.error ||
+          (pairingFlow.status === "expired"
+            ? "Pairing expired. Please scan a new QR code."
+            : "Connection failed.")
+        }
+        autoReturnMs={PAIRING_FAILURE_REDIRECT_MS}
+        onAutoReturn={() => {
+          pairingAttemptKeyRef.current = null;
+          resolvedSessionIdRef.current = null;
+          void resetPairingFlow({ clearPairing: true });
+        }}
+        onRetry={() => {
+          pairingAttemptKeyRef.current = null;
+          resolvedSessionIdRef.current = null;
+          void resetPairingFlow({ clearPairing: true });
+        }}
+      />
+    );
+  }
+
+  if (!pairing || pairingFlow.status !== "connected") {
     return <PairingScreen />;
   }
 
@@ -2786,6 +3003,7 @@ export default function ChatScreen() {
           />
 
           <ScrollView
+            ref={messageScrollViewRef}
             style={styles.messages}
             contentContainerStyle={[
               styles.messageContent,
@@ -2794,6 +3012,18 @@ export default function ChatScreen() {
                 justifyContent: "center",
               },
             ]}
+            onScroll={({ nativeEvent }) => {
+              const { contentOffset, contentSize, layoutMeasurement } = nativeEvent;
+              const distanceFromBottom =
+                contentSize.height - (contentOffset.y + layoutMeasurement.height);
+              setShowScrollToBottom(distanceFromBottom > 140);
+            }}
+            onContentSizeChange={() => {
+              if (!showScrollToBottom) {
+                scrollToBottom(false);
+              }
+            }}
+            scrollEventThrottle={16}
           >
             {renderItems.length === 0 ? (
               <EmptyChatState
@@ -2894,6 +3124,15 @@ export default function ChatScreen() {
             )}
           </ScrollView>
 
+          {showScrollToBottom ? (
+            <Pressable
+              style={styles.scrollToBottomButton}
+              onPress={() => scrollToBottom()}
+            >
+              <Text style={styles.scrollToBottomButtonText}>Jump to latest</Text>
+            </Pressable>
+          ) : null}
+
           <PromptInput onSend={send} />
         </SafeAreaView>
       </ProjectSidebar>
@@ -2929,6 +3168,26 @@ const styles = StyleSheet.create({
   },
   messages: {
     flex: 1,
+  },
+  scrollToBottomButton: {
+    position: "absolute",
+    right: 18,
+    bottom: 92,
+    zIndex: 20,
+    borderRadius: 999,
+    backgroundColor: "#111827",
+    paddingHorizontal: 16,
+    paddingVertical: 11,
+    shadowColor: "#000000",
+    shadowOpacity: 0.18,
+    shadowRadius: 12,
+    shadowOffset: { width: 0, height: 6 },
+    elevation: 8,
+  },
+  scrollToBottomButtonText: {
+    color: "#F9FAFB",
+    fontSize: 13,
+    fontWeight: "700",
   },
   messageContent: {
     paddingHorizontal: 16,

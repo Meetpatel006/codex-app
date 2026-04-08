@@ -10,6 +10,7 @@ const {
   setupRelay,
   getRelayStats,
   resolveTrustedMacSession,
+  resolveShortCode,
 } = require("./relay");
 
 function createRelayServer({
@@ -106,7 +107,13 @@ async function handleHTTPRequest(req, res, {
   }
 
   if (req.method === "POST" && pathname === "/v1/trusted/session/resolve") {
-    return handleJSONRoute(req, res, async (body) => resolveTrustedMacSession(body));
+    return handleJSONRoute(req, res, async (body) =>
+      resolveTrustedMacSession(body),
+    );
+  }
+
+  if (req.method === "POST" && pathname === "/v1/code/resolve") {
+    return handleJSONRoute(req, res, async (body) => resolveShortCode(body));
   }
 
   return writeJSON(res, 404, {

@@ -9,6 +9,21 @@ type PairingState = {
   expiryMs: number;
 };
 
+type PairingStatus =
+  | "pair_device"
+  | "scanning"
+  | "connecting"
+  | "connected"
+  | "failed"
+  | "expired";
+
+type PairingFlowState = {
+  status: PairingStatus;
+  error: string | null;
+  sessionId: string | null;
+  updatedAt: number;
+};
+
 type ProjectSession = {
   id: string;
   name: string;
@@ -26,12 +41,18 @@ type Project = {
 
 type SessionStore = {
   pairing: PairingState | null;
+  pairingFlow: PairingFlowState;
   mobileIdentityPrivateKeyHex: string | null;
   mobileIdentityPublicKeyHex: string | null;
   projects: Project[];
   activeProjectId: string | null;
   activeSessionId: string | null;
   setPairing: (pairing: PairingState) => Promise<void>;
+  beginPairingScan: () => void;
+  startPairing: (pairing: PairingState) => Promise<void>;
+  markPairingConnected: (sessionId?: string | null) => void;
+  markPairingFailed: (error: string, options?: { expired?: boolean }) => void;
+  resetPairingFlow: (options?: { clearPairing?: boolean }) => Promise<void>;
   clearPairing: () => Promise<void>;
   setMobileIdentity: (
     privateKeyHex: string,
@@ -59,6 +80,12 @@ const PROJECTS_KEY = "projects.list";
 const ACTIVE_PROJECT_KEY = "active.project";
 const ACTIVE_SESSION_KEY = "active.session";
 const SECURESTORE_SAFE_VALUE_BYTES = 1900;
+const INITIAL_PAIRING_FLOW: PairingFlowState = {
+  status: "pair_device",
+  error: null,
+  sessionId: null,
+  updatedAt: 0,
+};
 
 const LEGACY_MOCK_PROJECT_IDS = new Set([
   "proj-web",
@@ -105,6 +132,7 @@ async function persistProjectsSafely(projects: Project[]) {
 
 export const useSessionStore = create<SessionStore>((set, get) => ({
   pairing: null,
+  pairingFlow: INITIAL_PAIRING_FLOW,
   mobileIdentityPrivateKeyHex: null,
   mobileIdentityPublicKeyHex: null,
   projects: [],
@@ -114,9 +142,74 @@ export const useSessionStore = create<SessionStore>((set, get) => ({
     await SecureStore.setItemAsync(PAIRING_KEY, JSON.stringify(pairing));
     set({ pairing });
   },
+  beginPairingScan() {
+    set({
+      pairingFlow: {
+        status: "scanning",
+        error: null,
+        sessionId: null,
+        updatedAt: Date.now(),
+      },
+    });
+  },
+  async startPairing(pairing) {
+    await SecureStore.setItemAsync(PAIRING_KEY, JSON.stringify(pairing));
+    set({
+      pairing,
+      pairingFlow: {
+        status: "connecting",
+        error: null,
+        sessionId: pairing.sessionId,
+        updatedAt: Date.now(),
+      },
+    });
+  },
+  markPairingConnected(sessionId) {
+    set((state) => ({
+      pairingFlow: {
+        status: "connected",
+        error: null,
+        sessionId: sessionId || state.pairing?.sessionId || null,
+        updatedAt: Date.now(),
+      },
+    }));
+  },
+  markPairingFailed(error, options) {
+    set((state) => ({
+      pairingFlow: {
+        status: options?.expired ? "expired" : "failed",
+        error,
+        sessionId: state.pairing?.sessionId || null,
+        updatedAt: Date.now(),
+      },
+    }));
+  },
+  async resetPairingFlow(options) {
+    if (options?.clearPairing) {
+      await SecureStore.deleteItemAsync(PAIRING_KEY);
+    }
+
+    set((state) => ({
+      pairing: options?.clearPairing ? null : state.pairing,
+      pairingFlow: {
+        status: "pair_device",
+        error: null,
+        sessionId: null,
+        updatedAt: Date.now(),
+      },
+    }));
+  },
   async clearPairing() {
     await SecureStore.deleteItemAsync(PAIRING_KEY);
-    set({ pairing: null });
+    set({
+      pairing: null,
+      pairingFlow: {
+        status: "pair_device",
+        error: null,
+        sessionId: null,
+        updatedAt: Date.now(),
+      },
+    });
   },
   async setMobileIdentity(privateKeyHex, publicKeyHex) {
     await SecureStore.setItemAsync(IDENTITY_PRIVATE_KEY, privateKeyHex);
@@ -234,6 +327,7 @@ export const useSessionStore = create<SessionStore>((set, get) => ({
     ]);
   },
   async load() {
+    const currentFlow = get().pairingFlow;
     const [
       pairingRaw,
       privateKeyHex,
@@ -269,6 +363,15 @@ export const useSessionStore = create<SessionStore>((set, get) => ({
 
     set({
       pairing: pairingRaw ? (JSON.parse(pairingRaw) as PairingState) : null,
+      pairingFlow:
+        currentFlow.updatedAt > 0
+          ? currentFlow
+          : {
+              status: "pair_device",
+              error: null,
+              sessionId: null,
+              updatedAt: Date.now(),
+            },
       mobileIdentityPrivateKeyHex: privateKeyHex,
       mobileIdentityPublicKeyHex: publicKeyHex,
       projects: parsedProjects,
@@ -278,4 +381,10 @@ export const useSessionStore = create<SessionStore>((set, get) => ({
   },
 }));
 
-export type { PairingState, Project, ProjectSession };
+export type {
+  PairingFlowState,
+  PairingState,
+  PairingStatus,
+  Project,
+  ProjectSession,
+};

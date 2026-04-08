@@ -1,4 +1,4 @@
-import { startTransition, useEffect } from "react";
+import { startTransition, useEffect, useRef } from "react";
 
 import { relayService } from "@/services/relay";
 import {
@@ -45,6 +45,7 @@ export function SessionTranscriptLoader({
 }: SessionTranscriptLoaderProps) {
   const replaceMessages = useChatStore((state) => state.replaceMessages);
   const setDiffSnapshot = useDiffStore((state) => state.setDiffSnapshot);
+  const lastLoadKeyRef = useRef<string | null>(null);
 
   useEffect(() => {
     let isCancelled = false;
@@ -55,6 +56,12 @@ export function SessionTranscriptLoader({
         onLoadStateChange?.(false);
         return;
       }
+
+      const loadKey = `${normalizedRef}:${loadTick}`;
+      if (lastLoadKeyRef.current === loadKey) {
+        return;
+      }
+      lastLoadKeyRef.current = loadKey;
 
       if (showLoadingState) {
         onLoadStateChange?.(true);
