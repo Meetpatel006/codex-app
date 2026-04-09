@@ -1,9 +1,12 @@
-import React, { useMemo, useRef, useState } from "react";
+import React, { useEffect, useMemo, useRef, useState } from "react";
 import {
   ActivityIndicator,
   Alert,
   Image,
   Keyboard,
+  KeyboardAvoidingView,
+  Modal,
+  Platform,
   Pressable,
   StyleSheet,
   Text,
@@ -32,9 +35,35 @@ export function PairingScreen() {
   const [pfpImageSource] = useState(getRandomPfpAsset);
   const [manualCode, setManualCode] = useState("");
   const [isProcessing, setIsProcessing] = useState(false);
+  const [isCodeInputFocused, setIsCodeInputFocused] = useState(false);
+  const [isManualEntryVisible, setIsManualEntryVisible] = useState(false);
+  const [showCursor, setShowCursor] = useState(true);
   const codeInputRef = useRef<TextInput>(null);
+  const modalInputRef = useRef<TextInput>(null);
 
   const styles = useMemo(() => createStyles(theme), [theme]);
+
+  useEffect(() => {
+    if (isManualEntryVisible) {
+      setTimeout(() => {
+        modalInputRef.current?.focus();
+      }, 300);
+    }
+  }, [isManualEntryVisible]);
+
+  useEffect(() => {
+    if (isCodeInputFocused) {
+      const interval = setInterval(() => {
+        setShowCursor((prev) => !prev);
+      }, 500);
+      return () => {
+        clearInterval(interval);
+        setShowCursor(true);
+      };
+    } else {
+      setShowCursor(true);
+    }
+  }, [isCodeInputFocused]);
 
   const handleManualSubmit = async () => {
     if (!manualCode.trim() || isProcessing) return;
@@ -50,6 +79,8 @@ export function PairingScreen() {
 
       const parsed = parsePairingPayload(payload);
       await startPairing(parsed);
+      setManualCode("");
+      setIsManualEntryVisible(false);
     } catch (error) {
       const message =
         error instanceof Error ? error.message : "Failed to connect";
@@ -78,6 +109,38 @@ export function PairingScreen() {
     (_, index) => manualCode[index] || "",
   );
 
+  const getLeftCodeDisplay = () => {
+    const chars = codeChars.slice(0, 4).map((char) => (char ? char : "_"));
+    const cursorPos = Math.min(manualCode.length, 4);
+    if (isCodeInputFocused && showCursor && cursorPos >= 0 && cursorPos < 4) {
+      chars[cursorPos] = "|";
+    }
+    return chars.join(" ");
+  };
+
+  const getRightCodeDisplay = () => {
+    const chars = codeChars.slice(4).map((char) => (char ? char : "_"));
+    const cursorPos = Math.max(0, manualCode.length - 4);
+    if (
+      isCodeInputFocused &&
+      showCursor &&
+      manualCode.length >= 4 &&
+      cursorPos < 4
+    ) {
+      chars[cursorPos] = "|";
+    }
+    return chars.join(" ");
+  };
+
+  const leftCode = getLeftCodeDisplay();
+  const rightCode = getRightCodeDisplay();
+
+  const closeModal = () => {
+    Keyboard.dismiss();
+    setManualCode("");
+    setIsManualEntryVisible(false);
+  };
+
   return (
     <View style={styles.container}>
       <View style={styles.centerContent}>
@@ -102,40 +165,58 @@ export function PairingScreen() {
           <Text style={styles.scanButtonText}>Scan with Codex to connect</Text>
         </Pressable>
 
-        <View style={styles.manualEntryBox}>
-          <Text style={styles.manualEntryTitle}>Or enter code manually</Text>
-          <View style={styles.codeEntryRow}>
+        <Pressable
+          style={styles.manualEntryTriggerButton}
+          onPress={() => setIsManualEntryVisible(true)}
+        >
+          <Text style={styles.manualEntryTriggerText}>Enter code manually</Text>
+        </Pressable>
+      </View>
+
+      <Modal
+        visible={isManualEntryVisible}
+        transparent
+        animationType="fade"
+        onRequestClose={closeModal}
+      >
+        <KeyboardAvoidingView
+          behavior={Platform.OS === "ios" ? "padding" : undefined}
+          style={styles.modalBackdrop}
+        >
+          <Pressable style={styles.modalOverlay} onPress={closeModal} />
+          <View style={styles.modalCard}>
+            <Text style={styles.modalTitle}>Enter Code</Text>
+
+            <Text style={styles.modalSubtitle}>
+              Enter the 8-character code from your Codex desktop app
+            </Text>
+
             <Pressable
-              style={styles.codeBoxes}
-              onPress={() => codeInputRef.current?.focus()}
+              style={styles.modalCodeRow}
+              onPress={() => modalInputRef.current?.focus()}
             >
-              {codeChars.slice(0, 4).map((char, index) => (
-                <View
-                  key={`left-${index}`}
-                  style={[
-                    styles.codeBox,
-                    char ? styles.codeBoxFilled : undefined,
-                  ]}
-                >
-                  <Text style={styles.codeBoxText}>{char}</Text>
-                </View>
-              ))}
-              <Text style={styles.codeDivider}>-</Text>
-              {codeChars.slice(4).map((char, index) => (
-                <View
-                  key={`right-${index}`}
-                  style={[
-                    styles.codeBox,
-                    char ? styles.codeBoxFilled : undefined,
-                  ]}
-                >
-                  <Text style={styles.codeBoxText}>{char}</Text>
-                </View>
-              ))}
+              <View
+                style={[
+                  styles.modalCodePill,
+                  isCodeInputFocused && styles.modalCodePillFocused,
+                ]}
+              >
+                <Text style={styles.modalCodeText}>{leftCode}</Text>
+              </View>
+              <Text style={styles.modalCodeDivider}>-</Text>
+              <View
+                style={[
+                  styles.modalCodePill,
+                  isCodeInputFocused && styles.modalCodePillFocused,
+                ]}
+              >
+                <Text style={styles.modalCodeText}>{rightCode}</Text>
+              </View>
             </Pressable>
+
             <TextInput
-              ref={codeInputRef}
-              style={styles.hiddenInput}
+              ref={modalInputRef}
+              style={styles.modalHiddenInput}
               keyboardType="default"
               value={manualCode}
               onChangeText={handleManualCodeChange}
@@ -143,27 +224,36 @@ export function PairingScreen() {
               autoCapitalize="characters"
               autoCorrect={false}
               returnKeyType="done"
-              maxLength={12}
+              maxLength={8}
+              onFocus={() => setIsCodeInputFocused(true)}
+              onBlur={() => setIsCodeInputFocused(false)}
               onSubmitEditing={handleManualSubmit}
             />
-            <Pressable
-              style={[
-                styles.pillSubmitButton,
-                (!manualCode.trim() || isProcessing) &&
-                  styles.pillSubmitButtonDisabled,
-              ]}
-              onPress={handleManualSubmit}
-              disabled={!manualCode.trim() || isProcessing}
-            >
-              {isProcessing ? (
-                <ActivityIndicator color="#111111" size="small" />
-              ) : (
-                <Text style={styles.pillSubmitButtonText}>Connect</Text>
-              )}
-            </Pressable>
+
+            <View style={styles.modalButtonRow}>
+              <Pressable style={styles.modalCancelButton} onPress={closeModal}>
+                <Text style={styles.modalCancelButtonText}>Cancel</Text>
+              </Pressable>
+
+              <Pressable
+                style={[
+                  styles.modalConnectButton,
+                  (!manualCode.trim() || isProcessing) &&
+                    styles.modalConnectButtonDisabled,
+                ]}
+                onPress={handleManualSubmit}
+                disabled={!manualCode.trim() || isProcessing}
+              >
+                {isProcessing ? (
+                  <ActivityIndicator color="#ffffff" size="small" />
+                ) : (
+                  <Text style={styles.modalConnectButtonText}>Connect</Text>
+                )}
+              </Pressable>
+            </View>
           </View>
-        </View>
-      </View>
+        </KeyboardAvoidingView>
+      </Modal>
 
       <Text style={styles.termsCopy}>
         By continuing, you agree to our{" "}
@@ -224,86 +314,139 @@ const createStyles = (theme: ReturnType<typeof useTheme>) =>
       fontWeight: "500",
       fontFamily: FontFamilies.normal.ibmPlexSans,
     },
-    manualEntryBox: {
+    manualEntryTriggerButton: {
       width: "90%",
-      maxWidth: 360,
-      borderRadius: 16,
-      backgroundColor: theme.backgroundElement,
+      maxWidth: 300,
+      borderRadius: 14,
       borderWidth: 1,
-      borderColor: theme.textSecondary + "30",
-      paddingHorizontal: 14,
+      borderColor: theme.textSecondary + "45",
+      paddingHorizontal: 20,
       paddingVertical: 12,
+      alignItems: "center",
+      justifyContent: "center",
     },
-    manualEntryTitle: {
+    manualEntryTriggerText: {
       color: theme.text,
-      fontSize: 14,
-      fontWeight: "600",
-      marginBottom: 10,
+      fontSize: 16,
+      fontWeight: "500",
       fontFamily: FontFamilies.normal.ibmPlexSans,
     },
-    codeEntryRow: {
-      gap: 10,
+    modalBackdrop: {
+      flex: 1,
+      justifyContent: "center",
+      alignItems: "center",
+      paddingHorizontal: 20,
     },
-    codeBoxes: {
+    modalOverlay: {
+      ...StyleSheet.absoluteFillObject,
+      backgroundColor: "#00000080",
+    },
+    modalCard: {
+      backgroundColor: theme.background,
+      borderRadius: 20,
+      paddingHorizontal: 24,
+      paddingTop: 24,
+      paddingBottom: 24,
+      width: "100%",
+      maxWidth: 340,
+    },
+    modalTitle: {
+      color: theme.text,
+      fontSize: 22,
+      fontWeight: "700",
+      textAlign: "center",
+      fontFamily: FontFamilies.display.spaceGrotesk,
+      marginBottom: 8,
+    },
+    modalSubtitle: {
+      color: theme.textSecondary,
+      fontSize: 15,
+      lineHeight: 22,
+      textAlign: "center",
+      marginBottom: 24,
+      fontFamily: FontFamilies.normal.ibmPlexSans,
+    },
+    modalCodeRow: {
       flexDirection: "row",
       alignItems: "center",
       justifyContent: "center",
-      backgroundColor: theme.background,
-      borderRadius: 24,
-      borderWidth: 1,
-      borderColor: theme.textSecondary + "30",
-      paddingHorizontal: 8,
-      height: 58,
+      gap: 8,
+      marginBottom: 24,
     },
-    codeBox: {
-      width: 34,
-      height: 40,
-      borderRadius: 10,
+    modalCodePill: {
+      height: 54,
+      minWidth: 132,
+      borderRadius: 27,
       borderWidth: 1,
-      borderColor: theme.textSecondary + "35",
+      borderColor: theme.textSecondary + "3a",
+      backgroundColor: theme.backgroundElement,
       alignItems: "center",
       justifyContent: "center",
-      backgroundColor: theme.backgroundElement,
-      marginHorizontal: 3,
+      paddingHorizontal: 16,
     },
-    codeBoxFilled: {
-      borderColor: theme.textSecondary + "70",
+    modalCodePillFocused: {
+      borderColor: theme.textSecondary + "80",
+      borderWidth: 2,
     },
-    codeBoxText: {
+    modalCodeText: {
       color: theme.text,
-      fontSize: 16,
-      fontWeight: "600",
-      fontFamily: FontFamilies.normal.ibmPlexSans,
-      textTransform: "uppercase",
-    },
-    codeDivider: {
-      color: theme.textSecondary,
       fontSize: 18,
-      fontWeight: "700",
-      marginHorizontal: 4,
-      fontFamily: FontFamilies.normal.ibmPlexSans,
+      fontWeight: "600",
+      fontFamily: FontFamilies.mono.jetBrainsMono,
+      textTransform: "uppercase",
+      letterSpacing: 1,
     },
-    hiddenInput: {
+    modalCursor: {
+      color: theme.text,
+      fontSize: 18,
+      fontWeight: "600",
+      fontFamily: FontFamilies.mono.jetBrainsMono,
+    },
+    modalCodeDivider: {
+      color: theme.textSecondary,
+      fontSize: 20,
+      fontWeight: "700",
+      fontFamily: FontFamilies.mono.jetBrainsMono,
+    },
+    modalHiddenInput: {
       position: "absolute",
       opacity: 0,
       width: 1,
       height: 1,
     },
-    pillSubmitButton: {
-      backgroundColor: "#f2f2f2",
-      borderRadius: 20,
-      paddingHorizontal: 16,
-      height: 36,
+    modalButtonRow: {
+      flexDirection: "row",
+      gap: 12,
+      marginTop: 8,
+    },
+    modalConnectButton: {
+      flex: 1,
+      backgroundColor: "#2563eb",
+      borderRadius: 14,
+      height: 52,
       alignItems: "center",
       justifyContent: "center",
-      minWidth: 82,
     },
-    pillSubmitButtonDisabled: {
-      opacity: 0.55,
+    modalConnectButtonDisabled: {
+      backgroundColor: theme.textSecondary + "30",
     },
-    pillSubmitButtonText: {
-      color: "#111111",
-      fontSize: 14,
+    modalConnectButtonText: {
+      color: "#ffffff",
+      fontSize: 17,
+      fontWeight: "600",
+      fontFamily: FontFamilies.normal.ibmPlexSans,
+    },
+    modalCancelButton: {
+      flex: 1,
+      height: 52,
+      alignItems: "center",
+      justifyContent: "center",
+      borderRadius: 14,
+      backgroundColor: theme.backgroundElement,
+    },
+    modalCancelButtonText: {
+      color: theme.text,
+      fontSize: 17,
       fontWeight: "600",
       fontFamily: FontFamilies.normal.ibmPlexSans,
     },
