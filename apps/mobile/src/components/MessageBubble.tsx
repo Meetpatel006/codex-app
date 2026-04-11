@@ -253,27 +253,59 @@ export function MessageBubble({
             fontSize: 24,
             lineHeight: 32,
             fontFamily: FontFamilies.display.spaceGrotesk,
-            fontWeight: "bold" as const,
+            fontWeight: "700" as const,
+            marginTop: 0,
+            marginBottom: 0,
+            letterSpacing: -0.3,
           },
           h2: {
             color: colors.assistantText,
             fontSize: 21,
             lineHeight: 28,
             fontFamily: FontFamilies.display.spaceGrotesk,
-            fontWeight: "bold" as const,
+            fontWeight: "700" as const,
+            marginTop: 0,
+            marginBottom: 0,
+            letterSpacing: -0.2,
           },
           h3: {
             color: colors.assistantText,
             fontSize: 18,
             lineHeight: 25,
             fontFamily: FontFamilies.normal.ibmPlexSans,
-            fontWeight: "bold" as const,
+            fontWeight: "600" as const,
+            marginTop: 0,
+            marginBottom: 0,
+          },
+          h4: {
+            color: colors.assistantText,
+            fontSize: 16,
+            lineHeight: 22,
+            fontFamily: FontFamilies.normal.ibmPlexSans,
+            fontWeight: "600" as const,
+          },
+          h5: {
+            color: colors.assistantText,
+            fontSize: 14,
+            lineHeight: 20,
+            fontFamily: FontFamilies.normal.ibmPlexSans,
+            fontWeight: "600" as const,
+          },
+          h6: {
+            color: colors.assistantText,
+            fontSize: 13,
+            lineHeight: 18,
+            fontFamily: FontFamilies.normal.ibmPlexSans,
+            fontWeight: "600" as const,
           },
           strong: {
-            fontWeight: "bold" as const,
+            fontWeight: "700" as const,
           },
           em: {
             fontStyle: "italic",
+          },
+          s: {
+            textDecorationLine: "line-through" as const,
           },
           code: {
             fontFamily: FontFamilies.mono.jetBrainsMono,
@@ -295,11 +327,40 @@ export function MessageBubble({
             borderLeftColor: colors.backgroundSelected,
             backgroundColor: colors.backgroundElement,
           },
+          blockquoteMark: {
+            color: colors.textSecondary,
+          },
           list: {
             color: colors.assistantText,
+            fontSize: 15,
+            lineHeight: 24,
+          },
+          listItemMarker: {
+            color: colors.assistantText,
+            fontSize: 15,
+            lineHeight: 24,
           },
           taskList: {
             color: colors.assistantText,
+          },
+          taskListItemMarker: {
+            color: colors.assistantText,
+          },
+          thematicBreak: {
+            backgroundColor: colors.backgroundSelected,
+            height: 1,
+          },
+          table: {
+            borderColor: colors.codeBorder,
+          },
+          tableCell: {
+            color: colors.assistantText,
+            fontSize: 14,
+          },
+          tableHeader: {
+            color: colors.assistantText,
+            fontWeight: "700" as const,
+            fontSize: 14,
           },
         }) as unknown as MarkdownStyle,
       [colors],
@@ -334,6 +395,7 @@ export function MessageBubble({
             <EnrichedMarkdownText
               key={index}
               markdown={processedContent}
+              flavor="github"
               markdownStyle={markdownStyle}
               onLinkPress={({ url }) => {
                 if (/^https?:\/\//i.test(url)) {
