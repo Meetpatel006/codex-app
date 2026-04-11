@@ -19,6 +19,7 @@ import { QrCodeIcon } from "@/components/icons/Icon";
 import { FontFamilies } from "@/constants/fonts";
 import { getRandomPfpAsset } from "@/constants/pfp-assets";
 import { useTheme } from "@/hooks/use-theme";
+import { useChatStore } from "@/store/chat";
 import { useSessionStore } from "@/store/session";
 import {
   isShortCode,

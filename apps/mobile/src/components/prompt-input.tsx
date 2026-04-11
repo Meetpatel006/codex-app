@@ -25,9 +25,15 @@ const ANIMATION_DURATION = 280;
 
 interface PromptInputProps {
   onSend?: (text: string) => void;
+  onFocusChange?: (isFocused: boolean) => void;
+  onKeyboardHeightChange?: (height: number) => void;
 }
 
-export function PromptInput({ onSend }: PromptInputProps) {
+export function PromptInput({
+  onSend,
+  onFocusChange,
+  onKeyboardHeightChange,
+}: PromptInputProps) {
   const [prompt, setPrompt] = useState("");
   const [isFocused, setIsFocused] = useState(false);
   const isFocusedRef = useRef(false);
@@ -58,6 +64,7 @@ export function PromptInput({ onSend }: PromptInputProps) {
         damping: 28,
         stiffness: 200,
       }).start();
+      onKeyboardHeightChange?.(e.endCoordinates.height);
     });
 
     const hideSub = Keyboard.addListener(hideEvent, () => {
@@ -67,6 +74,7 @@ export function PromptInput({ onSend }: PromptInputProps) {
         damping: 28,
         stiffness: 200,
       }).start();
+      onKeyboardHeightChange?.(0);
     });
 
     return () => {
@@ -78,6 +86,7 @@ export function PromptInput({ onSend }: PromptInputProps) {
   const animateToFocused = useCallback(() => {
     isFocusedRef.current = true;
     setIsFocused(true);
+    onFocusChange?.(true);
     Animated.parallel([
       Animated.timing(pillOpacity, {
         toValue: 0,
@@ -167,6 +176,7 @@ export function PromptInput({ onSend }: PromptInputProps) {
       ]),
     ]).start(() => {
       setIsFocused(false);
+      onFocusChange?.(false);
     });
   }, [isDropdownOpenRef]);
 

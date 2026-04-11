@@ -5,7 +5,8 @@ import React, {
   useRef,
   useState,
 } from "react";
-import { Pressable, ScrollView, StyleSheet, Text } from "react-native";
+import { Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
+import { ArrowDownIcon } from "@/components/icons/Icon";
 import { SafeAreaView } from "react-native-safe-area-context";
 
 import { MessageBubble } from "@/components/MessageBubble";
@@ -1079,11 +1080,14 @@ function buildSidebarUsageItems(params: {
 
 export default function ChatScreen() {
   const theme = useTheme();
+  const styles = useMemo(() => createStyles(theme), [theme]);
   const [assistantMessageId, setAssistantMessageId] = useState<string | null>(
     null,
   );
   const [sessionLoadTick, setSessionLoadTick] = useState(0);
   const [chatLoading, setChatLoading] = useState(false);
+  const [promptFocused, setPromptFocused] = useState(false);
+  const [keyboardHeight, setKeyboardHeight] = useState(0);
 
   // Track command IDs by itemId across renders
   const commandIdMapRef = useRef(new Map<string, string>());
@@ -1461,9 +1465,8 @@ export default function ChatScreen() {
         nextActiveSessionId = preservedActiveSessionId;
       }
 
-      const normalizedStoredActiveSessionId = normalizeThreadReference(
-        nextActiveSessionId,
-      );
+      const normalizedStoredActiveSessionId =
+        normalizeThreadReference(nextActiveSessionId);
       if (normalizedStoredActiveSessionId) {
         const projectContainingActiveSession =
           mappedProjects.find((project) =>
@@ -1850,7 +1853,8 @@ export default function ChatScreen() {
   useEffect(() => {
     const onError = relayService.on("error", (error) => {
       const message = error?.message || String(error);
-      const currentPairingStatus = useSessionStore.getState().pairingFlow.status;
+      const currentPairingStatus =
+        useSessionStore.getState().pairingFlow.status;
       console.warn("[mobile][relay/error]", message);
       if (
         currentPairingStatus === "connecting" ||
@@ -1863,7 +1867,8 @@ export default function ChatScreen() {
     });
 
     const onPresence = relayService.on("presence", (presence) => {
-      const currentPairingStatus = useSessionStore.getState().pairingFlow.status;
+      const currentPairingStatus =
+        useSessionStore.getState().pairingFlow.status;
       setIsConnected(presence === "online");
       if (presence !== "online") {
         codexInitializedRef.current = false;
@@ -1905,7 +1910,9 @@ export default function ChatScreen() {
 
         clearPairingConnectTimeout();
         const nextSessionId =
-          resolvedSessionIdRef.current || useSessionStore.getState().pairing?.sessionId || null;
+          resolvedSessionIdRef.current ||
+          useSessionStore.getState().pairing?.sessionId ||
+          null;
         const currentPairing = useSessionStore.getState().pairing;
         if (
           currentPairing &&
@@ -2550,9 +2557,12 @@ export default function ChatScreen() {
       }
 
       if (pairing.expiryMs <= Date.now()) {
-        await failPairing("Pairing QR has expired. Please generate a new one.", {
-          expired: true,
-        });
+        await failPairing(
+          "Pairing QR has expired. Please generate a new one.",
+          {
+            expired: true,
+          },
+        );
         return;
       }
 
@@ -2642,9 +2652,9 @@ export default function ChatScreen() {
       void failPairing(
         error instanceof Error ? error.message : "Connection failed",
         {
-          expired: String(
-            error instanceof Error ? error.message : error,
-          ).toLowerCase().includes("expired"),
+          expired: String(error instanceof Error ? error.message : error)
+            .toLowerCase()
+            .includes("expired"),
         },
       );
     });
@@ -2920,7 +2930,9 @@ export default function ChatScreen() {
     return (
       <ConnectionErrorScreen
         title={
-          pairingFlow.status === "expired" ? "Pairing Expired" : "Connection Failed"
+          pairingFlow.status === "expired"
+            ? "Pairing Expired"
+            : "Connection Failed"
         }
         error={
           pairingFlow.error ||
@@ -3013,9 +3025,11 @@ export default function ChatScreen() {
               },
             ]}
             onScroll={({ nativeEvent }) => {
-              const { contentOffset, contentSize, layoutMeasurement } = nativeEvent;
+              const { contentOffset, contentSize, layoutMeasurement } =
+                nativeEvent;
               const distanceFromBottom =
-                contentSize.height - (contentOffset.y + layoutMeasurement.height);
+                contentSize.height -
+                (contentOffset.y + layoutMeasurement.height);
               setShowScrollToBottom(distanceFromBottom > 140);
             }}
             onContentSizeChange={() => {
@@ -3124,16 +3138,38 @@ export default function ChatScreen() {
             )}
           </ScrollView>
 
-          {showScrollToBottom ? (
-            <Pressable
-              style={styles.scrollToBottomButton}
-              onPress={() => scrollToBottom()}
+          {showScrollToBottom && renderItems.length > 0 ? (
+            <View
+              style={[
+                styles.scrollToBottomButtonContainer,
+                {
+                  bottom:
+                    keyboardHeight > 0
+                      ? keyboardHeight + 60
+                      : promptFocused
+                        ? 220
+                        : 92,
+                },
+              ]}
             >
-              <Text style={styles.scrollToBottomButtonText}>Jump to latest</Text>
-            </Pressable>
+              <Pressable
+                style={styles.scrollToBottomButton}
+                onPress={() => scrollToBottom()}
+                hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+              >
+                <ArrowDownIcon size={16} color={theme.textSecondary} />
+                <Text style={styles.scrollToBottomButtonText}>
+                  Jump To Bottom 
+                </Text>
+              </Pressable>
+            </View>
           ) : null}
 
-          <PromptInput onSend={send} />
+          <PromptInput
+            onSend={send}
+            onFocusChange={setPromptFocused}
+            onKeyboardHeightChange={setKeyboardHeight}
+          />
         </SafeAreaView>
       </ProjectSidebar>
 
@@ -3151,48 +3187,53 @@ export default function ChatScreen() {
   );
 }
 
-const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    gap: 10,
-  },
-  sessionButtonText: {
-    fontSize: 13,
-    fontWeight: "600",
-  },
-  title: {
-    fontSize: 20,
-    fontWeight: "700",
-    flex: 1,
-    minWidth: 0,
-  },
-  messages: {
-    flex: 1,
-  },
-  scrollToBottomButton: {
-    position: "absolute",
-    right: 18,
-    bottom: 92,
-    zIndex: 20,
-    borderRadius: 999,
-    backgroundColor: "#111827",
-    paddingHorizontal: 16,
-    paddingVertical: 11,
-    shadowColor: "#000000",
-    shadowOpacity: 0.18,
-    shadowRadius: 12,
-    shadowOffset: { width: 0, height: 6 },
-    elevation: 8,
-  },
-  scrollToBottomButtonText: {
-    color: "#F9FAFB",
-    fontSize: 13,
-    fontWeight: "700",
-  },
-  messageContent: {
-    paddingHorizontal: 16,
-    paddingTop: 56,
-    paddingBottom: 200,
-    gap: 20,
-  },
-});
+const createStyles = (theme: ReturnType<typeof useTheme>) =>
+  StyleSheet.create({
+    container: {
+      flex: 1,
+      gap: 10,
+    },
+    sessionButtonText: {
+      fontSize: 13,
+      fontWeight: "600",
+    },
+    title: {
+      fontSize: 20,
+      fontWeight: "700",
+      flex: 1,
+      minWidth: 0,
+    },
+    messages: {
+      flex: 1,
+    },
+    scrollToBottomButtonContainer: {
+      position: "absolute",
+      left: 0,
+      right: 0,
+      bottom: 200,
+      alignItems: "center",
+      zIndex: 100,
+    },
+    scrollToBottomButton: {
+      flexDirection: "row",
+      alignItems: "center",
+      gap: 6,
+      paddingHorizontal: 12,
+      paddingVertical: 8,
+      borderRadius: 8,
+      backgroundColor: theme.backgroundElement,
+      borderWidth: StyleSheet.hairlineWidth,
+      borderColor: theme.textSecondary + "30",
+    },
+    scrollToBottomButtonText: {
+      color: theme.textSecondary,
+      fontSize: 12,
+      fontWeight: "500",
+    },
+    messageContent: {
+      paddingHorizontal: 16,
+      paddingTop: 56,
+      paddingBottom: 200,
+      gap: 20,
+    },
+  });
