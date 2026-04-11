@@ -1,5 +1,7 @@
 import React, { useMemo } from "react";
-import { StyleSheet, Text, View } from "react-native";
+import { Linking, StyleSheet, Text, View } from "react-native";
+import { EnrichedMarkdownText } from "react-native-enriched-markdown";
+import type { MarkdownStyle } from "react-native-enriched-markdown";
 import { CodeBlockView } from "./CodeBlockView";
 import { CommandExecutionCard } from "./CommandExecutionCard";
 import { CommandExecutionGroup } from "./CommandExecutionGroup";
@@ -7,7 +9,6 @@ import { DiffBlockView } from "./DiffBlockView";
 import { FileChangeCard } from "./FileChangeCard";
 import { ApprovalCard } from "./ApprovalCard";
 import { ApprovalStatusCard } from "./ApprovalStatusCard";
-import { MarkdownText } from "./MarkdownText";
 import { ThinkingIndicator, ThinkingText } from "./ThinkingIndicator";
 import { FontFamilies } from "@/constants/fonts";
 import {
@@ -44,6 +45,12 @@ type Props = {
   onApprove?: () => void;
   onReject?: () => void;
 };
+
+function processMentionsForMarkdown(text: string): string {
+  return text
+    .replace(/@([\w\-./]+)/g, "[$1](file://$1)")
+    .replace(/\$([\w\-]+)/g, "[$1](skill://$1)");
+}
 
 export function MessageBubble({
   role,
@@ -232,6 +239,72 @@ export function MessageBubble({
   if (isAssistant) {
     const segments = parseMarkdownSegments(text);
 
+    const markdownStyle = useMemo(
+      () =>
+        ({
+          paragraph: {
+            color: colors.assistantText,
+            fontSize: 15,
+            lineHeight: 24,
+            fontFamily: FontFamilies.normal.ibmPlexSans,
+          },
+          h1: {
+            color: colors.assistantText,
+            fontSize: 24,
+            lineHeight: 32,
+            fontFamily: FontFamilies.display.spaceGrotesk,
+            fontWeight: "bold" as const,
+          },
+          h2: {
+            color: colors.assistantText,
+            fontSize: 21,
+            lineHeight: 28,
+            fontFamily: FontFamilies.display.spaceGrotesk,
+            fontWeight: "bold" as const,
+          },
+          h3: {
+            color: colors.assistantText,
+            fontSize: 18,
+            lineHeight: 25,
+            fontFamily: FontFamilies.normal.ibmPlexSans,
+            fontWeight: "bold" as const,
+          },
+          strong: {
+            fontWeight: "bold" as const,
+          },
+          em: {
+            fontStyle: "italic",
+          },
+          code: {
+            fontFamily: FontFamilies.mono.jetBrainsMono,
+            fontSize: 12.5,
+            color: colors.codeText,
+            backgroundColor: colors.codeHeaderBackground,
+            borderColor: colors.codeBorder,
+          },
+          codeBlock: {
+            fontFamily: FontFamilies.mono.jetBrainsMono,
+            fontSize: 13,
+            backgroundColor: colors.codeBackground,
+            borderColor: colors.codeBorder,
+          },
+          link: {
+            color: colors.linkColor,
+          },
+          blockquote: {
+            borderLeftColor: colors.backgroundSelected,
+            backgroundColor: colors.backgroundElement,
+          },
+          list: {
+            color: colors.assistantText,
+          },
+          taskList: {
+            color: colors.assistantText,
+          },
+        }) as unknown as MarkdownStyle,
+      [colors],
+    );
+
     return (
       <View style={themedStyles.assistantWrapper}>
         {segments.map((segment, index) => {
@@ -255,7 +328,20 @@ export function MessageBubble({
             );
           }
 
-          return <MarkdownText key={index} content={segment.content} />;
+          const processedContent = processMentionsForMarkdown(segment.content);
+
+          return (
+            <EnrichedMarkdownText
+              key={index}
+              markdown={processedContent}
+              markdownStyle={markdownStyle}
+              onLinkPress={({ url }) => {
+                if (/^https?:\/\//i.test(url)) {
+                  void Linking.openURL(url);
+                }
+              }}
+            />
+          );
         })}
         {streaming && <ThinkingIndicator visible={streaming} />}
       </View>
