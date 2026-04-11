@@ -4,7 +4,9 @@ import {
   DefaultTheme,
   ThemeProvider,
 } from "@react-navigation/native";
-import { Stack } from "expo-router";
+import { Stack, useNavigationContainerRef } from "expo-router";
+import { isRunningInExpoGo } from "expo";
+import * as Sentry from "@sentry/react-native";
 import React, { useEffect } from "react";
 import { useColorScheme, View } from "react-native";
 import * as SplashScreen from "expo-splash-screen";
@@ -15,9 +17,36 @@ import { useLoadFonts } from "@/hooks/use-fonts";
 
 import { GestureHandlerRootView } from "react-native-gesture-handler";
 
-SplashScreen.preventAutoHideAsync();
+const navigationIntegration = Sentry.reactNavigationIntegration({
+  enableTimeToInitialDisplay: !isRunningInExpoGo(),
+});
 
-export default function RootLayout() {
+Sentry.init({
+  dsn: process.env.EXPO_PUBLIC_SENTRY_DSN,
+  tracesSampleRate: 1.0,
+  profilesSampleRate: 1.0,
+  replaysOnErrorSampleRate: 1.0,
+  replaysSessionSampleRate: 0.1,
+  enableLogs: true,
+  integrations: [
+    navigationIntegration,
+    Sentry.mobileReplayIntegration({
+      maskAllText: true,
+      maskAllImages: true,
+    }),
+  ],
+  enableNativeFramesTracking: !isRunningInExpoGo(),
+  environment: __DEV__ ? "development" : "production",
+});
+
+export default Sentry.wrap(function RootLayout() {
+  const ref = useNavigationContainerRef();
+
+  useEffect(() => {
+    if (ref) {
+      navigationIntegration.registerNavigationContainer(ref);
+    }
+  }, [ref]);
   const colorScheme = useColorScheme();
   const fontsLoaded = useLoadFonts();
 
@@ -50,4 +79,4 @@ export default function RootLayout() {
       </ThemeProvider>
     </GestureHandlerRootView>
   );
-}
+});
