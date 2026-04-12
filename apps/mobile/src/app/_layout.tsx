@@ -10,6 +10,7 @@ import * as Sentry from "@sentry/react-native";
 import React, { useEffect } from "react";
 import { useColorScheme, View } from "react-native";
 import * as SplashScreen from "expo-splash-screen";
+import { PostHogProvider } from "posthog-react-native";
 
 import { AnimatedSplashOverlay } from "@/components/animated-icon";
 import { preloadPfpAssets } from "@/constants/pfp-assets-preload";
@@ -69,14 +70,19 @@ export default Sentry.wrap(function RootLayout() {
   }
 
   return (
-    <GestureHandlerRootView style={{ flex: 1 }}>
-      <ThemeProvider value={colorScheme === "dark" ? DarkTheme : DefaultTheme}>
-        <AnimatedSplashOverlay />
-        <Stack screenOptions={{ headerShown: false }}>
-          <Stack.Screen name="index" />
-          <Stack.Screen name="pairing-scan" />
-        </Stack>
-      </ThemeProvider>
-    </GestureHandlerRootView>
+    <PostHogProvider
+      apiKey={process.env.EXPO_PUBLIC_POSTHOG_API_KEY!}
+      options={{ host: process.env.EXPO_PUBLIC_POSTHOG_HOST }}
+    >
+      <GestureHandlerRootView style={{ flex: 1 }}>
+        <ThemeProvider value={colorScheme === "dark" ? DarkTheme : DefaultTheme}>
+          <AnimatedSplashOverlay />
+          <Stack screenOptions={{ headerShown: false }}>
+            <Stack.Screen name="index" />
+            <Stack.Screen name="pairing-scan" />
+          </Stack>
+        </ThemeProvider>
+      </GestureHandlerRootView>
+    </PostHogProvider>
   );
 });
