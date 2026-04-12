@@ -19,6 +19,10 @@ import { QrCodeIcon } from "@/components/icons/Icon";
 import { FontFamilies } from "@/constants/fonts";
 import { getRandomPfpAsset } from "@/constants/pfp-assets";
 import { useTheme } from "@/hooks/use-theme";
+import {
+  captureTelemetryError,
+  trackTelemetryEvent,
+} from "@/services/telemetry";
 import { useChatStore } from "@/store/chat";
 import { useSessionStore } from "@/store/session";
 import {
@@ -71,6 +75,7 @@ export function PairingScreen() {
 
     Keyboard.dismiss();
     setIsProcessing(true);
+    const usedShortCode = isShortCode(manualCode.trim());
 
     try {
       const trimmedCode = manualCode.trim();
@@ -80,6 +85,10 @@ export function PairingScreen() {
 
       const parsed = parsePairingPayload(payload);
       await startPairing(parsed);
+      trackTelemetryEvent("pairing_manual_code_submitted", {
+        used_short_code: usedShortCode,
+        success: true,
+      });
       setManualCode("");
       setIsManualEntryVisible(false);
     } catch (error) {
@@ -91,6 +100,20 @@ export function PairingScreen() {
         markPairingFailed(message, { expired: true });
       } else {
         Alert.alert("Connection failed", message);
+      }
+
+      trackTelemetryEvent("pairing_manual_code_submitted", {
+        used_short_code: usedShortCode,
+        success: false,
+        expired: isExpired,
+      });
+      if (!isExpired) {
+        captureTelemetryError(error, {
+          area: "pairing.manual_submit",
+          properties: {
+            used_short_code: usedShortCode,
+          },
+        });
       }
     } finally {
       setIsProcessing(false);
@@ -140,6 +163,7 @@ export function PairingScreen() {
     Keyboard.dismiss();
     setManualCode("");
     setIsManualEntryVisible(false);
+    trackTelemetryEvent("pairing_manual_code_closed");
   };
 
   return (
@@ -158,6 +182,7 @@ export function PairingScreen() {
         <Pressable
           style={styles.scanButton}
           onPress={() => {
+            trackTelemetryEvent("pairing_scan_opened");
             beginPairingScan();
             router.push("/pairing-scan");
           }}
@@ -168,7 +193,10 @@ export function PairingScreen() {
 
         <Pressable
           style={styles.manualEntryTriggerButton}
-          onPress={() => setIsManualEntryVisible(true)}
+          onPress={() => {
+            trackTelemetryEvent("pairing_manual_code_opened");
+            setIsManualEntryVisible(true);
+          }}
         >
           <Text style={styles.manualEntryTriggerText}>Enter code manually</Text>
         </Pressable>

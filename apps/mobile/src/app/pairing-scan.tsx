@@ -4,6 +4,7 @@ import { CameraView, useCameraPermissions } from "expo-camera";
 import { useRouter } from "expo-router";
 
 import { FontFamilies } from "@/constants/fonts";
+import { trackTelemetryEvent } from "@/services/telemetry";
 import { useSessionStore } from "@/store/session";
 import { useTheme } from "@/hooks/use-theme";
 import { parsePairingPayload } from "@/utils/pairing";
@@ -29,11 +30,18 @@ export default function PairingScanScreen() {
       try {
         const parsed = parsePairingPayload(data);
         await startPairing(parsed);
+        trackTelemetryEvent("pairing_qr_scanned", {
+          success: true,
+        });
         router.replace("/");
       } catch (error) {
         const message =
           error instanceof Error ? error.message : "Invalid QR code";
         const isExpired = message.toLowerCase().includes("expired");
+        trackTelemetryEvent("pairing_qr_scanned", {
+          success: false,
+          expired: isExpired,
+        });
         if (isExpired) {
           markPairingFailed(message, { expired: true });
           router.replace("/");
@@ -56,6 +64,9 @@ export default function PairingScanScreen() {
 
   const handleRequestPermission = async () => {
     const result = await requestPermission();
+    trackTelemetryEvent("pairing_camera_permission_requested", {
+      granted: result.granted,
+    });
     if (!result.granted) {
       Alert.alert("Camera permission required", "Allow camera to scan QR.");
     }
@@ -75,6 +86,9 @@ export default function PairingScanScreen() {
           <Pressable
             style={styles.backButton}
             onPress={() => {
+              trackTelemetryEvent("pairing_scan_closed", {
+                reason: "permission_denied",
+              });
               void resetPairingFlow();
               router.back();
             }}
@@ -101,6 +115,9 @@ export default function PairingScanScreen() {
           <Pressable
             style={styles.closeButton}
             onPress={() => {
+              trackTelemetryEvent("pairing_scan_closed", {
+                reason: "cancel",
+              });
               void resetPairingFlow();
               router.back();
             }}

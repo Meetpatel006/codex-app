@@ -29,6 +29,12 @@ import { SidePanel } from "@/components/ui/side-panel";
 import { buildRequest } from "@/services/jsonrpc";
 import { bytesToBase64, hexToBytes } from "@/services/crypto";
 import { relayService } from "@/services/relay";
+import {
+  captureTelemetryError,
+  identifyTelemetryUser,
+  setTelemetryContext,
+  trackTelemetryEvent,
+} from "@/services/telemetry";
 import { resolveTrustedSession } from "@/services/trusted-resolve";
 import { useChatStore } from "@/store/chat";
 import type {
@@ -1251,6 +1257,10 @@ export default function ChatScreen() {
 
   const failPairing = useCallback(
     async (message: string, options?: { expired?: boolean }) => {
+      trackTelemetryEvent("pairing_failed", {
+        expired: Boolean(options?.expired),
+        reason: message,
+      });
       clearPairingConnectTimeout();
       pairingAttemptKeyRef.current = null;
       resolvedSessionIdRef.current = null;
@@ -1307,6 +1317,9 @@ export default function ChatScreen() {
           return true;
         }
         console.warn("[mobile][initialize] failed", error);
+        captureTelemetryError(error, {
+          area: "relay.initialize",
+        });
         return false;
       } finally {
         initializePromiseRef.current = null;
@@ -1372,7 +1385,16 @@ export default function ChatScreen() {
   );
 
   useEffect(() => {
-    void loadSession().then(() => setSessionLoaded(true));
+    void loadSession()
+      .then(() => {
+        setSessionLoaded(true);
+        trackTelemetryEvent("session_store_loaded");
+      })
+      .catch((error) => {
+        captureTelemetryError(error, {
+          area: "session.load",
+        });
+      });
   }, [loadSession]);
 
   useEffect(() => {
@@ -1391,7 +1413,37 @@ export default function ChatScreen() {
       sessionId: pairingFlow.sessionId,
       error: pairingFlow.error,
     });
+    trackTelemetryEvent("pairing_state_changed", {
+      status: pairingFlow.status,
+      has_error: Boolean(pairingFlow.error),
+      has_session_id: Boolean(pairingFlow.sessionId),
+    });
   }, [pairingFlow.error, pairingFlow.sessionId, pairingFlow.status]);
+
+  useEffect(() => {
+    identifyTelemetryUser({
+      publicKeyHex: publicKey,
+      pairingSessionId: pairing?.sessionId,
+    });
+  }, [pairing?.sessionId, publicKey]);
+
+  useEffect(() => {
+    const activeProject = projects.find((project) => project.id === activeProjectId);
+    setTelemetryContext({
+      pairingStatus: pairingFlow.status,
+      pairingSessionId: pairing?.sessionId || pairingFlow.sessionId,
+      activeProjectId,
+      activeProjectName: activeProject?.name || null,
+      activeSessionId,
+    });
+  }, [
+    activeProjectId,
+    activeSessionId,
+    pairing?.sessionId,
+    pairingFlow.sessionId,
+    pairingFlow.status,
+    projects,
+  ]);
 
   useEffect(() => {
     void loadRuntimeSelections().catch((error) => {
@@ -1741,6 +1793,10 @@ export default function ChatScreen() {
 
   const loadSelectedSession = useCallback(
     (projectId: string, sessionId: string) => {
+      trackTelemetryEvent("session_selected", {
+        project_id: projectId,
+        session_id: sessionId,
+      });
       pendingFreshThreadIdsRef.current.clear();
       approvalMessageIdMapRef.current.clear();
       approvalRequestStateRef.current.clear();
@@ -1857,6 +1913,12 @@ export default function ChatScreen() {
       const currentPairingStatus =
         useSessionStore.getState().pairingFlow.status;
       console.warn("[mobile][relay/error]", message);
+      captureTelemetryError(error, {
+        area: "relay.runtime",
+        properties: {
+          pairing_status: currentPairingStatus,
+        },
+      });
       if (
         currentPairingStatus === "connecting" ||
         currentPairingStatus === "connected"
@@ -1870,6 +1932,10 @@ export default function ChatScreen() {
     const onPresence = relayService.on("presence", (presence) => {
       const currentPairingStatus =
         useSessionStore.getState().pairingFlow.status;
+      trackTelemetryEvent("relay_presence_changed", {
+        presence,
+        pairing_status: currentPairingStatus,
+      });
       setIsConnected(presence === "online");
       if (presence !== "online") {
         codexInitializedRef.current = false;
@@ -1899,6 +1965,9 @@ export default function ChatScreen() {
       }
 
       bootstrappedReadySessionId = activeRelaySessionId;
+      trackTelemetryEvent("relay_ready", {
+        session_id: activeRelaySessionId,
+      });
       setIsConnected(true);
       codexInitializedRef.current = false;
       initializePromiseRef.current = null;
@@ -2576,6 +2645,9 @@ export default function ChatScreen() {
       resolvedSessionIdRef.current = null;
       initializePromiseRef.current = null;
       codexInitializedRef.current = false;
+      trackTelemetryEvent("pairing_connect_started", {
+        has_trusted_resolve: Boolean(pairing.macDeviceId),
+      });
       suppressPresenceFailureRef.current = true;
       relayService.disconnect();
       suppressPresenceFailureRef.current = false;
@@ -2593,6 +2665,7 @@ export default function ChatScreen() {
         identityPrivate = generated.privateKeyHex;
         identityPublic = generated.publicKeyHex;
         await setIdentity(identityPrivate, identityPublic);
+        trackTelemetryEvent("pairing_identity_generated");
       }
 
       const canUseTrustedResolve = Boolean(pairing.macDeviceId);
@@ -2650,6 +2723,12 @@ export default function ChatScreen() {
 
     void connect().catch((error) => {
       console.warn("[mobile][relay/connect] failed", error);
+      captureTelemetryError(error, {
+        area: "relay.connect",
+        properties: {
+          pairing_status: pairingFlow.status,
+        },
+      });
       void failPairing(
         error instanceof Error ? error.message : "Connection failed",
         {
@@ -2738,10 +2817,20 @@ export default function ChatScreen() {
             decision: approvalDecision,
           },
         });
+        trackTelemetryEvent("approval_submitted", {
+          approval_type: approvalRequest.approvalType || null,
+          decision: String(approvalDecision),
+        });
         updateApprovalRequest(messageId, {
           status: "approved",
         });
       } catch (error) {
+        captureTelemetryError(error, {
+          area: "approval.approve",
+          properties: {
+            approval_type: approvalRequest.approvalType || null,
+          },
+        });
         updateApprovalRequest(messageId, {
           status: "error",
           errorMessage:
@@ -2793,10 +2882,20 @@ export default function ChatScreen() {
             decision,
           },
         });
+        trackTelemetryEvent("approval_submitted", {
+          approval_type: approvalRequest.approvalType || null,
+          decision: String(decision),
+        });
         updateApprovalRequest(messageId, {
           status: "rejected",
         });
       } catch (error) {
+        captureTelemetryError(error, {
+          area: "approval.reject",
+          properties: {
+            approval_type: approvalRequest.approvalType || null,
+          },
+        });
         updateApprovalRequest(messageId, {
           status: "error",
           errorMessage:
@@ -2814,6 +2913,10 @@ export default function ChatScreen() {
       return;
     }
 
+    trackTelemetryEvent("prompt_send_started", {
+      prompt_length: text.trim().length,
+      has_active_session: Boolean(activeSessionId),
+    });
     const messageId = addUserMessage(text);
     setAssistantMessageId(null);
     setChatLoading(false);
@@ -2909,17 +3012,33 @@ export default function ChatScreen() {
           optimisticSessionTitle,
         );
       }
+      trackTelemetryEvent("prompt_send_succeeded", {
+        thread_id: acknowledgedThreadId || null,
+      });
       updateMessageDeliveryState(messageId, "sent");
     } catch (error) {
       console.error("[mobile][send] Failed to send message", error);
+      captureTelemetryError(error, {
+        area: "chat.send",
+        properties: {
+          has_active_session: Boolean(activeSessionId),
+        },
+      });
+      trackTelemetryEvent("prompt_send_failed", {
+        has_active_session: Boolean(activeSessionId),
+      });
       updateMessageDeliveryState(messageId, "failed");
     }
   }
 
   const scrollToBottom = useCallback((animated = true) => {
+    trackTelemetryEvent("chat_scroll_to_bottom", {
+      animated,
+      has_messages: renderItems.length > 0,
+    });
     messageScrollViewRef.current?.scrollToEnd({ animated });
     setShowScrollToBottom(false);
-  }, []);
+  }, [renderItems.length]);
 
   const showConnectingScreen = pairingFlow.status === "connecting";
 
@@ -2968,9 +3087,16 @@ export default function ChatScreen() {
         usageItems={sidebarUsageItems}
         usageHint={usageHintText}
         usageEmptyText="Usage data unavailable"
-        onOpen={() => setSidebarOpen(true)}
-        onClose={() => setSidebarOpen(false)}
+        onOpen={() => {
+          trackTelemetryEvent("chat_sidebar_opened");
+          setSidebarOpen(true);
+        }}
+        onClose={() => {
+          trackTelemetryEvent("chat_sidebar_closed");
+          setSidebarOpen(false);
+        }}
         onNewChat={() => {
+          trackTelemetryEvent("chat_new_session_started");
           pendingFreshThreadIdsRef.current.clear();
           approvalMessageIdMapRef.current.clear();
           approvalRequestStateRef.current.clear();
@@ -2980,9 +3106,16 @@ export default function ChatScreen() {
           setAssistantMessageId(null);
         }}
         onProjectSelect={(projectId) => {
+          trackTelemetryEvent("chat_project_selected", {
+            has_project_id: Boolean(projectId),
+          });
           console.log("[mobile][sidebar] project selected", { projectId });
         }}
         onSessionSelect={(projectId, sessionId) => {
+          trackTelemetryEvent("chat_session_selected_from_sidebar", {
+            has_project_id: Boolean(projectId),
+            has_session_id: Boolean(sessionId),
+          });
           console.log("[mobile][sidebar] session selected", {
             projectId,
             sessionId,
@@ -3005,9 +3138,18 @@ export default function ChatScreen() {
           />
 
           <ChatHeader
-            onOpenSidebar={() => setSidebarOpen(true)}
-            onOpenCommitSheet={() => setIsGitPanelOpen(true)}
-            onOpenDiffPanel={openDiffPanel}
+            onOpenSidebar={() => {
+              trackTelemetryEvent("chat_sidebar_opened");
+              setSidebarOpen(true);
+            }}
+            onOpenCommitSheet={() => {
+              trackTelemetryEvent("git_panel_opened_from_chat");
+              setIsGitPanelOpen(true);
+            }}
+            onOpenDiffPanel={() => {
+              trackTelemetryEvent("diff_panel_opened");
+              openDiffPanel();
+            }}
           />
 
           <ChatLoadingOverlay
@@ -3045,6 +3187,9 @@ export default function ChatScreen() {
                 projectName={activeProject?.name}
                 projects={projects}
                 onProjectSelect={(projectId) => {
+                  trackTelemetryEvent("chat_project_selected_from_empty_state", {
+                    has_project_id: Boolean(projectId),
+                  });
                   pendingFreshThreadIdsRef.current.clear();
                   approvalMessageIdMapRef.current.clear();
                   approvalRequestStateRef.current.clear();

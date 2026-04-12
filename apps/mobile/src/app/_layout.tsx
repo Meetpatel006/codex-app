@@ -4,8 +4,11 @@ import {
   DefaultTheme,
   ThemeProvider,
 } from "@react-navigation/native";
-import { Stack, useNavigationContainerRef } from "expo-router";
-import { isRunningInExpoGo } from "expo";
+import {
+  Stack,
+  useNavigationContainerRef,
+  usePathname,
+} from "expo-router";
 import * as Sentry from "@sentry/react-native";
 import React, { useEffect } from "react";
 import { useColorScheme, View } from "react-native";
@@ -15,30 +18,49 @@ import { PostHogProvider } from "posthog-react-native";
 import { AnimatedSplashOverlay } from "@/components/animated-icon";
 import { preloadPfpAssets } from "@/constants/pfp-assets-preload";
 import { useLoadFonts } from "@/hooks/use-fonts";
+import {
+  getPostHogClient,
+  getSentryNavigationIntegration,
+  initTelemetry,
+  trackScreen,
+} from "@/services/telemetry";
 
 import { GestureHandlerRootView } from "react-native-gesture-handler";
 
-const navigationIntegration = Sentry.reactNavigationIntegration({
-  enableTimeToInitialDisplay: !isRunningInExpoGo(),
-});
+const navigationIntegration = getSentryNavigationIntegration();
+initTelemetry();
 
-Sentry.init({
-  dsn: process.env.EXPO_PUBLIC_SENTRY_DSN,
-  tracesSampleRate: 1.0,
-  profilesSampleRate: 1.0,
-  replaysOnErrorSampleRate: 1.0,
-  replaysSessionSampleRate: 0.1,
-  enableLogs: true,
-  integrations: [
-    navigationIntegration,
-    Sentry.mobileReplayIntegration({
-      maskAllText: true,
-      maskAllImages: true,
-    }),
-  ],
-  enableNativeFramesTracking: !isRunningInExpoGo(),
-  environment: __DEV__ ? "development" : "production",
-});
+function TelemetryRouteTracker() {
+  const pathname = usePathname();
+
+  useEffect(() => {
+    const screenName = pathname === "/" ? "home" : pathname.replace(/^\//, "");
+    trackScreen(screenName, {
+      pathname,
+    });
+  }, [pathname]);
+
+  return null;
+}
+
+function TelemetryProviders({ children }: { children: React.ReactNode }) {
+  const posthogClient = getPostHogClient();
+
+  if (!posthogClient) {
+    return <>{children}</>;
+  }
+
+  return (
+    <PostHogProvider
+      client={posthogClient}
+      autocapture={{
+        captureScreens: false,
+      }}
+    >
+      {children}
+    </PostHogProvider>
+  );
+}
 
 export default Sentry.wrap(function RootLayout() {
   const ref = useNavigationContainerRef();
@@ -70,12 +92,10 @@ export default Sentry.wrap(function RootLayout() {
   }
 
   return (
-    <PostHogProvider
-      apiKey={process.env.EXPO_PUBLIC_POSTHOG_API_KEY!}
-      options={{ host: process.env.EXPO_PUBLIC_POSTHOG_HOST }}
-    >
+    <TelemetryProviders>
       <GestureHandlerRootView style={{ flex: 1 }}>
         <ThemeProvider value={colorScheme === "dark" ? DarkTheme : DefaultTheme}>
+          <TelemetryRouteTracker />
           <AnimatedSplashOverlay />
           <Stack screenOptions={{ headerShown: false }}>
             <Stack.Screen name="index" />
@@ -83,6 +103,6 @@ export default Sentry.wrap(function RootLayout() {
           </Stack>
         </ThemeProvider>
       </GestureHandlerRootView>
-    </PostHogProvider>
+    </TelemetryProviders>
   );
 });

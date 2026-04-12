@@ -24,6 +24,10 @@ import { useTheme } from "@/hooks/use-theme";
 import { useColorScheme } from "@/hooks/use-color-scheme";
 import { ThemedText } from "@/components/themed-text";
 import {
+  captureTelemetryError,
+  trackTelemetryEvent,
+} from "@/services/telemetry";
+import {
   getGitCwd,
   type GitStatusResult,
   type GitCommit,
@@ -86,13 +90,33 @@ export function GitPanel({ onClose }: GitPanelProps) {
   const activeProject = projects.find((p) => p.id === activeProjectId) || null;
   const gitCwd = getGitCwd(activeProject?.description);
 
+  useEffect(() => {
+    trackTelemetryEvent("git_panel_viewed", {
+      has_git_cwd: Boolean(gitCwd),
+    });
+  }, [gitCwd]);
+
   const loadStatus = useCallback(async () => {
     if (!gitCwd) return;
     try {
       const result = await requestGitStatus(gitCwd);
       setStatus(result);
+      trackTelemetryEvent("git_status_loaded", {
+        staged_count: Array.isArray(result?.staged) ? result.staged.length : 0,
+        unstaged_count: Array.isArray(result?.unstaged)
+          ? result.unstaged.length
+          : 0,
+        untracked_count: Array.isArray(result?.untracked)
+          ? result.untracked.length
+          : 0,
+        ahead: Number(result?.ahead || 0),
+        behind: Number(result?.behind || 0),
+      });
     } catch (err) {
       console.error("Failed to load git status:", err);
+      captureTelemetryError(err, {
+        area: "git.status.load",
+      });
     }
   }, [gitCwd]);
 
@@ -102,8 +126,14 @@ export function GitPanel({ onClose }: GitPanelProps) {
     try {
       const result = await requestGitLog(gitCwd, 50);
       setCommits(result.commits || []);
+      trackTelemetryEvent("git_history_loaded", {
+        commit_count: Array.isArray(result?.commits) ? result.commits.length : 0,
+      });
     } catch (err) {
       console.error("Failed to load git log:", err);
+      captureTelemetryError(err, {
+        area: "git.history.load",
+      });
     } finally {
       setHistoryLoading(false);
     }
@@ -114,8 +144,14 @@ export function GitPanel({ onClose }: GitPanelProps) {
     try {
       const result = await requestGitBranches(gitCwd);
       setBranches(result);
+      trackTelemetryEvent("git_branches_loaded", {
+        branch_count: Array.isArray(result?.branches) ? result.branches.length : 0,
+      });
     } catch (err) {
       console.error("Failed to load branches:", err);
+      captureTelemetryError(err, {
+        area: "git.branches.load",
+      });
     }
   }, [gitCwd]);
 
@@ -130,6 +166,7 @@ export function GitPanel({ onClose }: GitPanelProps) {
   }, [loadAll]);
 
   const onRefresh = useCallback(async () => {
+    trackTelemetryEvent("git_panel_refreshed");
     setRefreshing(true);
     await loadAll();
     setRefreshing(false);
@@ -141,9 +178,18 @@ export function GitPanel({ onClose }: GitPanelProps) {
       setStagingPaths(new Set(paths));
       try {
         await requestGitStage(gitCwd, paths);
+        trackTelemetryEvent("git_stage_completed", {
+          file_count: paths.length,
+        });
         await loadStatus();
       } catch (err) {
         console.error("Failed to stage:", err);
+        captureTelemetryError(err, {
+          area: "git.stage",
+          properties: {
+            file_count: paths.length,
+          },
+        });
         Alert.alert(
           "Error",
           err instanceof Error ? err.message : "Failed to stage files",
@@ -161,9 +207,18 @@ export function GitPanel({ onClose }: GitPanelProps) {
       setStagingPaths(new Set(paths));
       try {
         await requestGitUnstage(gitCwd, paths);
+        trackTelemetryEvent("git_unstage_completed", {
+          file_count: paths.length,
+        });
         await loadStatus();
       } catch (err) {
         console.error("Failed to unstage:", err);
+        captureTelemetryError(err, {
+          area: "git.unstage",
+          properties: {
+            file_count: paths.length,
+          },
+        });
         Alert.alert(
           "Error",
           err instanceof Error ? err.message : "Failed to unstage files",
@@ -181,9 +236,18 @@ export function GitPanel({ onClose }: GitPanelProps) {
       setDiscardingPaths(new Set(paths));
       try {
         await requestGitDiscard(gitCwd, paths);
+        trackTelemetryEvent("git_discard_completed", {
+          file_count: paths.length,
+        });
         await loadStatus();
       } catch (err) {
         console.error("Failed to discard:", err);
+        captureTelemetryError(err, {
+          area: "git.discard",
+          properties: {
+            file_count: paths.length,
+          },
+        });
         Alert.alert(
           "Error",
           err instanceof Error ? err.message : "Failed to discard changes",
@@ -208,8 +272,12 @@ export function GitPanel({ onClose }: GitPanelProps) {
           onPress: async () => {
             try {
               await requestGitDiscard(gitCwd, undefined, true);
+              trackTelemetryEvent("git_discard_all_completed");
               await loadStatus();
             } catch (err) {
+              captureTelemetryError(err, {
+                area: "git.discard_all",
+              });
               Alert.alert(
                 "Error",
                 err instanceof Error
@@ -228,9 +296,18 @@ export function GitPanel({ onClose }: GitPanelProps) {
     setLoading(true);
     try {
       await requestGitCommit(gitCwd, message.trim());
+      trackTelemetryEvent("git_commit_completed", {
+        message_length: message.trim().length,
+      });
       setMessage("");
       await loadAll();
     } catch (err) {
+      captureTelemetryError(err, {
+        area: "git.commit",
+        properties: {
+          message_length: message.trim().length,
+        },
+      });
       Alert.alert(
         "Error",
         err instanceof Error ? err.message : "Failed to commit",
@@ -245,8 +322,12 @@ export function GitPanel({ onClose }: GitPanelProps) {
     setPullLoading(true);
     try {
       await requestGitPull(gitCwd);
+      trackTelemetryEvent("git_pull_completed");
       await loadAll();
     } catch (err) {
+      captureTelemetryError(err, {
+        area: "git.pull",
+      });
       Alert.alert(
         "Pull Failed",
         err instanceof Error ? err.message : "Failed to pull",
@@ -261,8 +342,12 @@ export function GitPanel({ onClose }: GitPanelProps) {
     setPushLoading(true);
     try {
       await requestGitPush(gitCwd);
+      trackTelemetryEvent("git_push_completed");
       await loadAll();
     } catch (err) {
+      captureTelemetryError(err, {
+        area: "git.push",
+      });
       Alert.alert(
         "Push Failed",
         err instanceof Error ? err.message : "Failed to push",
@@ -278,8 +363,12 @@ export function GitPanel({ onClose }: GitPanelProps) {
       setLoading(true);
       try {
         await requestGitCheckout(gitCwd, branch);
+        trackTelemetryEvent("git_checkout_completed");
         await loadAll();
       } catch (err) {
+        captureTelemetryError(err, {
+          area: "git.checkout",
+        });
         Alert.alert(
           "Checkout Failed",
           err instanceof Error ? err.message : "Failed to checkout branch",
@@ -296,10 +385,19 @@ export function GitPanel({ onClose }: GitPanelProps) {
     setCreatingBranch(true);
     try {
       await requestGitCreateBranch(gitCwd, newBranchName.trim());
+      trackTelemetryEvent("git_branch_created", {
+        branch_name_length: newBranchName.trim().length,
+      });
       setNewBranchName("");
       setShowNewBranchInput(false);
       await loadAll();
     } catch (err) {
+      captureTelemetryError(err, {
+        area: "git.branch_create",
+        properties: {
+          branch_name_length: newBranchName.trim().length,
+        },
+      });
       Alert.alert(
         "Create Branch Failed",
         err instanceof Error ? err.message : "Failed to create branch",
@@ -313,6 +411,12 @@ export function GitPanel({ onClose }: GitPanelProps) {
     if (activeTab !== "branches") {
       setShowNewBranchInput(false);
     }
+  }, [activeTab]);
+
+  useEffect(() => {
+    trackTelemetryEvent("git_tab_selected", {
+      tab: activeTab,
+    });
   }, [activeTab]);
 
   const handleDeleteBranch = useCallback(
@@ -329,8 +433,12 @@ export function GitPanel({ onClose }: GitPanelProps) {
             onPress: async () => {
               try {
                 await requestGitDeleteBranch(gitCwd, branch);
+                trackTelemetryEvent("git_branch_deleted");
                 await loadBranches();
               } catch (err) {
+                captureTelemetryError(err, {
+                  area: "git.branch_delete",
+                });
                 Alert.alert(
                   "Delete Failed",
                   err instanceof Error
@@ -353,7 +461,11 @@ export function GitPanel({ onClose }: GitPanelProps) {
       try {
         const result = await requestGitCommitDetails(gitCwd, hash);
         setCommitDetails(result);
+        trackTelemetryEvent("git_commit_details_viewed");
       } catch (err) {
+        captureTelemetryError(err, {
+          area: "git.commit_details",
+        });
         Alert.alert(
           "Error",
           err instanceof Error ? err.message : "Failed to load commit details",
