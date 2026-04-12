@@ -1088,6 +1088,7 @@ export default function ChatScreen() {
   const [chatLoading, setChatLoading] = useState(false);
   const [promptFocused, setPromptFocused] = useState(false);
   const [keyboardHeight, setKeyboardHeight] = useState(0);
+  const [promptExpanded, setPromptExpanded] = useState(false);
 
   // Track command IDs by itemId across renders
   const commandIdMapRef = useRef(new Map<string, string>());
@@ -3145,10 +3146,12 @@ export default function ChatScreen() {
                 {
                   bottom:
                     keyboardHeight > 0
-                      ? keyboardHeight + 60
-                      : promptFocused
-                        ? 220
-                        : 92,
+                      ? keyboardHeight + 185
+                      : promptExpanded
+                        ? 185
+                        : promptFocused
+                          ? 185
+                          : 110,
                 },
               ]}
             >
@@ -3159,7 +3162,7 @@ export default function ChatScreen() {
               >
                 <ArrowDownIcon size={16} color={theme.textSecondary} />
                 <Text style={styles.scrollToBottomButtonText}>
-                  Jump To Bottom 
+                  Jump To Bottom
                 </Text>
               </Pressable>
             </View>
@@ -3169,6 +3172,7 @@ export default function ChatScreen() {
             onSend={send}
             onFocusChange={setPromptFocused}
             onKeyboardHeightChange={setKeyboardHeight}
+            onExpandedChange={setPromptExpanded}
           />
         </SafeAreaView>
       </ProjectSidebar>

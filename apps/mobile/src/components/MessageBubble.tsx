@@ -1,7 +1,5 @@
 import React, { useMemo } from "react";
-import { Linking, StyleSheet, Text, View } from "react-native";
-import { EnrichedMarkdownText } from "react-native-enriched-markdown";
-import type { MarkdownStyle } from "react-native-enriched-markdown";
+import { StyleSheet, Text, View } from "react-native";
 import { CodeBlockView } from "./CodeBlockView";
 import { CommandExecutionCard } from "./CommandExecutionCard";
 import { CommandExecutionGroup } from "./CommandExecutionGroup";
@@ -9,6 +7,7 @@ import { DiffBlockView } from "./DiffBlockView";
 import { FileChangeCard } from "./FileChangeCard";
 import { ApprovalCard } from "./ApprovalCard";
 import { ApprovalStatusCard } from "./ApprovalStatusCard";
+import { MarkdownText } from "./MarkdownText";
 import { ThinkingIndicator, ThinkingText } from "./ThinkingIndicator";
 import { FontFamilies } from "@/constants/fonts";
 import {
@@ -239,133 +238,6 @@ export function MessageBubble({
   if (isAssistant) {
     const segments = parseMarkdownSegments(text);
 
-    const markdownStyle = useMemo(
-      () =>
-        ({
-          paragraph: {
-            color: colors.assistantText,
-            fontSize: 15,
-            lineHeight: 24,
-            fontFamily: FontFamilies.normal.ibmPlexSans,
-          },
-          h1: {
-            color: colors.assistantText,
-            fontSize: 24,
-            lineHeight: 32,
-            fontFamily: FontFamilies.display.spaceGrotesk,
-            fontWeight: "700" as const,
-            marginTop: 0,
-            marginBottom: 0,
-            letterSpacing: -0.3,
-          },
-          h2: {
-            color: colors.assistantText,
-            fontSize: 21,
-            lineHeight: 28,
-            fontFamily: FontFamilies.display.spaceGrotesk,
-            fontWeight: "700" as const,
-            marginTop: 0,
-            marginBottom: 0,
-            letterSpacing: -0.2,
-          },
-          h3: {
-            color: colors.assistantText,
-            fontSize: 18,
-            lineHeight: 25,
-            fontFamily: FontFamilies.normal.ibmPlexSans,
-            fontWeight: "600" as const,
-            marginTop: 0,
-            marginBottom: 0,
-          },
-          h4: {
-            color: colors.assistantText,
-            fontSize: 16,
-            lineHeight: 22,
-            fontFamily: FontFamilies.normal.ibmPlexSans,
-            fontWeight: "600" as const,
-          },
-          h5: {
-            color: colors.assistantText,
-            fontSize: 14,
-            lineHeight: 20,
-            fontFamily: FontFamilies.normal.ibmPlexSans,
-            fontWeight: "600" as const,
-          },
-          h6: {
-            color: colors.assistantText,
-            fontSize: 13,
-            lineHeight: 18,
-            fontFamily: FontFamilies.normal.ibmPlexSans,
-            fontWeight: "600" as const,
-          },
-          strong: {
-            fontWeight: "700" as const,
-          },
-          em: {
-            fontStyle: "italic",
-          },
-          s: {
-            textDecorationLine: "line-through" as const,
-          },
-          code: {
-            fontFamily: FontFamilies.mono.jetBrainsMono,
-            fontSize: 12.5,
-            color: colors.codeText,
-            backgroundColor: colors.codeHeaderBackground,
-            borderColor: colors.codeBorder,
-          },
-          codeBlock: {
-            fontFamily: FontFamilies.mono.jetBrainsMono,
-            fontSize: 13,
-            backgroundColor: colors.codeBackground,
-            borderColor: colors.codeBorder,
-          },
-          link: {
-            color: colors.linkColor,
-          },
-          blockquote: {
-            borderLeftColor: colors.backgroundSelected,
-            backgroundColor: colors.backgroundElement,
-          },
-          blockquoteMark: {
-            color: colors.textSecondary,
-          },
-          list: {
-            color: colors.assistantText,
-            fontSize: 15,
-            lineHeight: 24,
-          },
-          listItemMarker: {
-            color: colors.assistantText,
-            fontSize: 15,
-            lineHeight: 24,
-          },
-          taskList: {
-            color: colors.assistantText,
-          },
-          taskListItemMarker: {
-            color: colors.assistantText,
-          },
-          thematicBreak: {
-            backgroundColor: colors.backgroundSelected,
-            height: 1,
-          },
-          table: {
-            borderColor: colors.codeBorder,
-          },
-          tableCell: {
-            color: colors.assistantText,
-            fontSize: 14,
-          },
-          tableHeader: {
-            color: colors.assistantText,
-            fontWeight: "700" as const,
-            fontSize: 14,
-          },
-        }) as unknown as MarkdownStyle,
-      [colors],
-    );
-
     return (
       <View style={themedStyles.assistantWrapper}>
         {segments.map((segment, index) => {
@@ -391,19 +263,7 @@ export function MessageBubble({
 
           const processedContent = processMentionsForMarkdown(segment.content);
 
-          return (
-            <EnrichedMarkdownText
-              key={index}
-              markdown={processedContent}
-              flavor="github"
-              markdownStyle={markdownStyle}
-              onLinkPress={({ url }) => {
-                if (/^https?:\/\//i.test(url)) {
-                  void Linking.openURL(url);
-                }
-              }}
-            />
-          );
+          return <MarkdownText key={index} content={processedContent} />;
         })}
         {streaming && <ThinkingIndicator visible={streaming} />}
       </View>

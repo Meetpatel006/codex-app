@@ -27,12 +27,14 @@ interface PromptInputProps {
   onSend?: (text: string) => void;
   onFocusChange?: (isFocused: boolean) => void;
   onKeyboardHeightChange?: (height: number) => void;
+  onExpandedChange?: (isExpanded: boolean) => void;
 }
 
 export function PromptInput({
   onSend,
   onFocusChange,
   onKeyboardHeightChange,
+  onExpandedChange,
 }: PromptInputProps) {
   const [prompt, setPrompt] = useState("");
   const [isFocused, setIsFocused] = useState(false);
@@ -308,17 +310,21 @@ export function PromptInput({
                   <ModelSelector
                     onDropdownOpen={() => {
                       isDropdownOpenRef.current = true;
+                      onExpandedChange?.(true);
                     }}
                     onDropdownClose={() => {
                       isDropdownOpenRef.current = false;
+                      onExpandedChange?.(false);
                     }}
                   />
                   <ReasoningSelector
                     onDropdownOpen={() => {
                       isDropdownOpenRef.current = true;
+                      onExpandedChange?.(true);
                     }}
                     onDropdownClose={() => {
                       isDropdownOpenRef.current = false;
+                      onExpandedChange?.(false);
                     }}
                   />
                 </View>
@@ -368,7 +374,16 @@ export function PromptInput({
               transform: [{ translateY: extrasTranslate }],
             }}
           >
-            <PromptExtras />
+            <PromptExtras
+              onDropdownOpen={() => {
+                isDropdownOpenRef.current = true;
+                onExpandedChange?.(true);
+              }}
+              onDropdownClose={() => {
+                isDropdownOpenRef.current = false;
+                onExpandedChange?.(false);
+              }}
+            />
           </Animated.View>
         </View>
       </LinearGradient>

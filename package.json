@@ -7,7 +7,7 @@
     "lint": "turbo run lint",
     "format": "prettier --write \"**/*.{ts,tsx,md}\"",
     "check-types": "turbo run check-types",
-    "run:stack": "node ./scripts/run-relay-bridge.js",
+    "run:stack": "pwsh -NoProfile -Command \"Set-Item -Path Env:REMODEX_RELAY -Value 'https://jalisa-unreputed-cleta.ngrok-free.dev/relay'; Start-Process ngrok -ArgumentList 'http','9000'; node ./scripts/run-relay-bridge.js\"",
     "serve:relay-test": "node ./scripts/serve-relay-test.js",
     "test:bridge:windows": "node --test ./packages/bridge/test/*.test.js --test-name-pattern='^(?!.*macOS).*$'"
   },

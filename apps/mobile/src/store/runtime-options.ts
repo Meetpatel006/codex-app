@@ -23,15 +23,19 @@ export type ModelOption = {
   defaultReasoningEffort?: string;
 };
 
+type ThreadSelection = {
+  model: string | null;
+  thinking: string | null;
+  permission: string | null;
+  branch: string | null;
+};
+
 type RuntimeOptionsStore = {
   options: RuntimeOptions;
   modelOptions: ModelOption[];
   selectedModel: string | null;
   selectedThinking: string | null;
-  threadSelections: Record<
-    string,
-    { model: string | null; thinking: string | null }
-  >;
+  threadSelections: Record<string, ThreadSelection>;
   selectionsLoaded: boolean;
   isLoading: boolean;
   error: string | null;
@@ -46,6 +50,8 @@ type RuntimeOptionsStore = {
 
 const SELECTED_MODEL_KEY = "runtime.selected.model";
 const SELECTED_THINKING_KEY = "runtime.selected.thinking";
+const SELECTED_PERMISSION_KEY = "runtime.selected.permission";
+const SELECTED_BRANCH_KEY = "runtime.selected.branch";
 const THREAD_SELECTIONS_KEY = "runtime.thread.selections";
 
 function normalizeSelection(value: string | null | undefined) {
@@ -80,14 +86,21 @@ export const useRuntimeOptionsStore = create<RuntimeOptionsStore>((set) => ({
     set({ error, isLoading: false });
   },
   async loadSelections() {
-    const [storedModel, storedThinking, storedThreadSelections] =
-      await Promise.all([
-        SecureStore.getItemAsync(SELECTED_MODEL_KEY),
-        SecureStore.getItemAsync(SELECTED_THINKING_KEY),
-        SecureStore.getItemAsync(THREAD_SELECTIONS_KEY),
-      ]);
+    const [
+      storedModel,
+      storedThinking,
+      storedPermission,
+      storedBranch,
+      storedThreadSelections,
+    ] = await Promise.all([
+      SecureStore.getItemAsync(SELECTED_MODEL_KEY),
+      SecureStore.getItemAsync(SELECTED_THINKING_KEY),
+      SecureStore.getItemAsync(SELECTED_PERMISSION_KEY),
+      SecureStore.getItemAsync(SELECTED_BRANCH_KEY),
+      SecureStore.getItemAsync(THREAD_SELECTIONS_KEY),
+    ]);
 
-    let parsedThreadSelections = {};
+    let parsedThreadSelections: Record<string, ThreadSelection> = {};
     try {
       const parsed = storedThreadSelections
         ? JSON.parse(storedThreadSelections)
@@ -140,6 +153,8 @@ export async function setThreadModelSelection(
   const current = state.threadSelections[normalizedThreadId] || {
     model: null,
     thinking: null,
+    permission: null,
+    branch: null,
   };
   const nextSelections = {
     ...state.threadSelections,
@@ -170,12 +185,78 @@ export async function setThreadThinkingSelection(
   const current = state.threadSelections[normalizedThreadId] || {
     model: null,
     thinking: null,
+    permission: null,
+    branch: null,
   };
   const nextSelections = {
     ...state.threadSelections,
     [normalizedThreadId]: {
       ...current,
       thinking: normalizedThinking,
+    },
+  };
+
+  useRuntimeOptionsStore.setState({ threadSelections: nextSelections });
+  await SecureStore.setItemAsync(
+    THREAD_SELECTIONS_KEY,
+    JSON.stringify(nextSelections),
+  );
+}
+
+export async function setThreadBranchSelection(
+  threadId: string | null | undefined,
+  branch: string | null | undefined,
+) {
+  const normalizedThreadId = normalizeSelection(threadId);
+  if (!normalizedThreadId) {
+    return;
+  }
+
+  const normalizedBranch = normalizeSelection(branch);
+  const state = useRuntimeOptionsStore.getState();
+  const current = state.threadSelections[normalizedThreadId] || {
+    model: null,
+    thinking: null,
+    permission: null,
+    branch: null,
+  };
+  const nextSelections = {
+    ...state.threadSelections,
+    [normalizedThreadId]: {
+      ...current,
+      branch: normalizedBranch,
+    },
+  };
+
+  useRuntimeOptionsStore.setState({ threadSelections: nextSelections });
+  await SecureStore.setItemAsync(
+    THREAD_SELECTIONS_KEY,
+    JSON.stringify(nextSelections),
+  );
+}
+
+export async function setThreadPermissionSelection(
+  threadId: string | null | undefined,
+  permission: string | null | undefined,
+) {
+  const normalizedThreadId = normalizeSelection(threadId);
+  if (!normalizedThreadId) {
+    return;
+  }
+
+  const normalizedPermission = normalizeSelection(permission);
+  const state = useRuntimeOptionsStore.getState();
+  const current = state.threadSelections[normalizedThreadId] || {
+    model: null,
+    thinking: null,
+    permission: null,
+    branch: null,
+  };
+  const nextSelections = {
+    ...state.threadSelections,
+    [normalizedThreadId]: {
+      ...current,
+      permission: normalizedPermission,
     },
   };
 
