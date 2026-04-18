@@ -95,6 +95,12 @@ type CodexSessionsListResult = {
   sessions?: CodexSessionSummary[];
 };
 
+type CodexActiveSessionResult = {
+  activeSessionId?: string;
+  session?: CodexSessionSummary | null;
+  source?: string;
+};
+
 type UpsertSystemMessageFn = (
   id: string,
   text: string,
@@ -177,6 +183,29 @@ type RelayMessageParams = {
     text?: string;
     message?: string;
     summary?: string;
+    commandExecution?: Partial<CommandExecutionData> & {
+      outputDelta?: string;
+      textDelta?: string;
+      chunk?: string;
+      exit_code?: number;
+      durationMs?: number;
+      duration_ms?: number;
+    };
+    fileChanges?: FileChangeData[];
+    command?: string | string[];
+    cmd?: string | string[];
+    raw_command?: string;
+    rawCommand?: string;
+    cwd?: string;
+    working_directory?: string;
+    output?: string;
+    status?:
+      | string
+      | { type?: string; statusType?: string; status_type?: string };
+    exitCode?: number;
+    exit_code?: number;
+    durationMs?: number;
+    duration_ms?: number;
   };
   msg?: Record<string, unknown> & RelayMessageParams;
 };
@@ -202,9 +231,39 @@ type AccountUsageSnapshot = {
   updatedAt: number;
 };
 
+const loggedUntitledFallbackSessions = new Set<string>();
+
 const PAIRING_CONNECT_TIMEOUT_MS = 15_000;
 const PAIRING_FAILURE_REDIRECT_MS = 2_500;
+const ACTIVE_SESSION_SYNC_POLL_MS = 2_500;
+const MANUAL_SESSION_SELECTION_GUARD_MS = 8_000;
+const DUPLICATE_MESSAGE_WINDOW_MS = 350;
+const CHAT_THREAD_SCOPED_METHODS = new Set([
+  "message/stream",
+  "message/complete",
+  "item/agentMessage/delta",
+  "item/reasoning/textDelta",
+  "item/completed",
+  "item/started",
+  "item/updated",
+  "item/commandExecution/outputDelta",
+  "item/commandExecution/updated",
+  "item/commandExecution/requestApproval",
+  "item/fileChange/requestApproval",
+  "item/fileChange/outputDelta",
+  "turn/diff/updated",
+  "thread/status/changed",
+  "codex/event/item_completed",
+  "codex/event/background_event",
+  "codex/event/apply_patch_approval_request",
+  "codex/event/exec_command_begin",
+  "codex/event/exec_command_output_delta",
+  "codex/event/exec_command_end",
+]);
 let bootstrappedReadySessionId: string | null = null;
+let lastInboundMessageSignature = "";
+let lastInboundMessageAtMs = 0;
+let lastActiveSessionPollAtMs = 0;
 
 function normalizeEventToken(value: unknown) {
   return typeof value === "string"
@@ -422,6 +481,302 @@ function isAssistantMessageItem(item: RelayMessageParams["item"]) {
     normalizedType === "assistantmessage" ||
     normalizedRole === "assistant"
   );
+}
+
+function isCommandExecutionItem(item: RelayMessageParams["item"]) {
+  if (!item || typeof item !== "object") {
+    return false;
+  }
+
+  const normalizedType = normalizeEventToken(item.type);
+  return (
+    normalizedType === "commandexecution" ||
+    normalizedType === "commandexec" ||
+    normalizedType === "execcommand" ||
+    normalizedType === "shellcommand"
+  );
+}
+
+function isFileChangeItem(item: RelayMessageParams["item"]) {
+  if (!item || typeof item !== "object") {
+    return false;
+  }
+
+  const normalizedType = normalizeEventToken(item.type);
+  return (
+    normalizedType === "filechange" ||
+    normalizedType === "applypatch" ||
+    normalizedType === "patchapply"
+  );
+}
+
+function extractMessageThreadId(params?: RelayMessageParams): string {
+  const eventPayload = params?.msg || params;
+  const paramsTurn =
+    (params as unknown as { turn?: { threadId?: string; thread_id?: string } })
+      ?.turn || {};
+  const eventTurn =
+    (
+      eventPayload as unknown as {
+        turn?: { threadId?: string; thread_id?: string };
+      }
+    )?.turn || {};
+  const paramsItem =
+    (params?.item as unknown as {
+      threadId?: string;
+      thread_id?: string;
+    }) || {};
+  const eventItem =
+    (
+      eventPayload as unknown as {
+        item?: { threadId?: string; thread_id?: string };
+      }
+    )?.item || {};
+
+  const candidates = [
+    params?.threadId,
+    params?.thread?.id,
+    params?.thread?.threadId,
+    paramsTurn.threadId,
+    paramsTurn.thread_id,
+    (eventPayload as RelayMessageParams | undefined)?.threadId,
+    (eventPayload as RelayMessageParams | undefined)?.thread?.id,
+    (eventPayload as RelayMessageParams | undefined)?.thread?.threadId,
+    eventTurn.threadId,
+    eventTurn.thread_id,
+    paramsItem.threadId,
+    paramsItem.thread_id,
+    eventItem.threadId,
+    eventItem.thread_id,
+  ];
+
+  for (const candidate of candidates) {
+    const normalized = normalizeThreadReference(String(candidate || "").trim());
+    if (normalized) {
+      return normalized;
+    }
+  }
+
+  return "";
+}
+
+function extractMessageTurnId(params?: RelayMessageParams): string {
+  const eventPayload = params?.msg || params;
+  const paramsTurn =
+    (params as unknown as { turn?: { id?: string; turnId?: string } })?.turn ||
+    {};
+  const eventTurn =
+    (eventPayload as unknown as { turn?: { id?: string; turnId?: string } })
+      ?.turn || {};
+
+  const candidates = [
+    params?.turnId,
+    paramsTurn.id,
+    paramsTurn.turnId,
+    (eventPayload as RelayMessageParams | undefined)?.turnId,
+    eventTurn.id,
+    eventTurn.turnId,
+  ];
+  for (const candidate of candidates) {
+    const normalized = String(candidate || "").trim();
+    if (normalized) {
+      return normalized;
+    }
+  }
+  return "";
+}
+
+function compactSignatureValue(value: unknown, maxLength = 96) {
+  const normalized = String(value || "")
+    .replace(/\s+/g, " ")
+    .trim();
+  if (!normalized) {
+    return "";
+  }
+  if (normalized.length <= maxLength) {
+    return normalized;
+  }
+  const head = normalized.slice(0, Math.floor(maxLength / 2));
+  const tail = normalized.slice(-Math.floor(maxLength / 2));
+  return `${head}...${tail}`;
+}
+
+function buildMessageSignature(method: string, params?: RelayMessageParams) {
+  const eventPayload = params?.msg || params;
+  const itemObject = incomingItemObject(params);
+  const commandExecution = itemObject?.commandExecution || {};
+
+  const itemId = String(
+    itemObject?.id ||
+      itemObject?.itemId ||
+      itemObject?.item_id ||
+      params?.itemId ||
+      params?.item_id ||
+      (eventPayload as RelayMessageParams | undefined)?.itemId ||
+      (eventPayload as RelayMessageParams | undefined)?.item_id ||
+      params?.call_id ||
+      params?.callId ||
+      (eventPayload as RelayMessageParams | undefined)?.call_id ||
+      (eventPayload as RelayMessageParams | undefined)?.callId ||
+      "",
+  ).trim();
+  const threadId = extractMessageThreadId(params);
+  const turnId = extractMessageTurnId(params);
+  const delta = compactSignatureValue(
+    params?.delta ||
+      params?.textDelta ||
+      params?.text_delta ||
+      params?.chunk ||
+      (eventPayload as RelayMessageParams | undefined)?.delta ||
+      (eventPayload as RelayMessageParams | undefined)?.textDelta ||
+      (eventPayload as RelayMessageParams | undefined)?.text_delta ||
+      (eventPayload as RelayMessageParams | undefined)?.chunk ||
+      commandExecution.outputDelta ||
+      commandExecution.textDelta ||
+      commandExecution.chunk ||
+      "",
+  );
+  const text = compactSignatureValue(
+    params?.text ||
+      params?.message ||
+      (eventPayload as RelayMessageParams | undefined)?.text ||
+      (eventPayload as RelayMessageParams | undefined)?.message ||
+      itemObject?.text ||
+      itemObject?.message ||
+      itemObject?.summary ||
+      "",
+  );
+  const command = compactSignatureValue(
+    stringifyCommandValue(
+      params?.command ||
+        params?.cmd ||
+        params?.raw_command ||
+        params?.rawCommand ||
+        (eventPayload as RelayMessageParams | undefined)?.command ||
+        (eventPayload as RelayMessageParams | undefined)?.cmd ||
+        (eventPayload as RelayMessageParams | undefined)?.raw_command ||
+        (eventPayload as RelayMessageParams | undefined)?.rawCommand ||
+        itemObject?.command ||
+        itemObject?.cmd ||
+        itemObject?.raw_command ||
+        itemObject?.rawCommand,
+    ),
+  );
+  const cwd = compactSignatureValue(
+    params?.cwd ||
+      params?.working_directory ||
+      (eventPayload as RelayMessageParams | undefined)?.cwd ||
+      (eventPayload as RelayMessageParams | undefined)?.working_directory ||
+      itemObject?.cwd ||
+      itemObject?.working_directory ||
+      "",
+  );
+  const status = normalizeEventToken(
+    params?.status ||
+      params?.phase ||
+      itemObject?.status ||
+      (eventPayload as RelayMessageParams | undefined)?.status ||
+      (eventPayload as RelayMessageParams | undefined)?.phase,
+  );
+  const exitCode =
+    params?.exitCode ??
+    params?.exit_code ??
+    (eventPayload as RelayMessageParams | undefined)?.exitCode ??
+    (eventPayload as RelayMessageParams | undefined)?.exit_code ??
+    itemObject?.exitCode ??
+    itemObject?.exit_code ??
+    commandExecution.exit_code;
+  const durationMs =
+    params?.durationMs ??
+    params?.duration_ms ??
+    (eventPayload as RelayMessageParams | undefined)?.durationMs ??
+    (eventPayload as RelayMessageParams | undefined)?.duration_ms ??
+    itemObject?.durationMs ??
+    itemObject?.duration_ms ??
+    commandExecution.durationMs ??
+    commandExecution.duration_ms;
+
+  return [
+    method,
+    threadId,
+    turnId,
+    itemId,
+    status,
+    String(exitCode ?? ""),
+    String(durationMs ?? ""),
+    command,
+    cwd,
+    delta,
+    text,
+  ].join("|");
+}
+
+function isImmediateDuplicateMessage(
+  method: string,
+  params?: RelayMessageParams,
+) {
+  const signature = buildMessageSignature(method, params);
+  if (!signature) {
+    return false;
+  }
+  const now = Date.now();
+  const isDuplicate =
+    signature === lastInboundMessageSignature &&
+    now - lastInboundMessageAtMs <= DUPLICATE_MESSAGE_WINDOW_MS;
+  lastInboundMessageSignature = signature;
+  lastInboundMessageAtMs = now;
+  return isDuplicate;
+}
+
+function isChatThreadScopedMethod(method: string) {
+  return CHAT_THREAD_SCOPED_METHODS.has(method);
+}
+
+function resolveCommandExecutionStatus(
+  value: unknown,
+  exitCode?: number,
+): CommandExecutionData["status"] | undefined {
+  const normalized = normalizeEventToken(value);
+  if (!normalized) {
+    if (typeof exitCode === "number") {
+      return exitCode === 0 ? "completed" : "failed";
+    }
+    return undefined;
+  }
+
+  if (
+    normalized.includes("fail") ||
+    normalized.includes("error") ||
+    normalized.includes("denied")
+  ) {
+    return "failed";
+  }
+  if (
+    normalized.includes("stop") ||
+    normalized.includes("cancel") ||
+    normalized.includes("interrupt")
+  ) {
+    return "stopped";
+  }
+  if (
+    normalized.includes("complete") ||
+    normalized.includes("done") ||
+    normalized.includes("finish") ||
+    normalized.includes("success")
+  ) {
+    return "completed";
+  }
+  if (
+    normalized.includes("run") ||
+    normalized.includes("start") ||
+    normalized.includes("pending") ||
+    normalized.includes("progress") ||
+    normalized.includes("active")
+  ) {
+    return "running";
+  }
+
+  return undefined;
 }
 
 function buildRenderItems(messages: ChatMessage[]): RenderItem[] {
@@ -692,12 +1047,15 @@ function mapCodexSessionsToProjects(sessions: CodexSessionSummary[]) {
     project.createdAt = Math.min(project.createdAt, lastActiveAt);
     const normalizedTitle = sanitizeSessionTitle(session.title || "");
     if (!normalizedTitle) {
-      console.log("[mobile][codex/sessions/list] Untitled chat fallback", {
-        sessionId: rawSessionId,
-        rolloutPath: session.rolloutPath || "",
-        projectName,
-        rawTitlePreview: String(session.title || "").slice(0, 180),
-      });
+      if (!loggedUntitledFallbackSessions.has(rawSessionId)) {
+        loggedUntitledFallbackSessions.add(rawSessionId);
+        console.log("[mobile][codex/sessions/list] Untitled chat fallback", {
+          sessionId: rawSessionId,
+          rolloutPath: session.rolloutPath || "",
+          projectName,
+          rawTitlePreview: String(session.title || "").slice(0, 180),
+        });
+      }
     }
     project.sessions.push({
       id: sessionKey,
@@ -1111,6 +1469,10 @@ export default function ChatScreen() {
   const delayedSessionRefreshTimersRef = useRef(
     new Set<ReturnType<typeof setTimeout>>(),
   );
+  const manualSessionSelectionGuardRef = useRef<{
+    threadId: string;
+    expiresAt: number;
+  } | null>(null);
   const pairingAttemptKeyRef = useRef<string | null>(null);
   const pairingConnectTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(
     null,
@@ -1118,6 +1480,8 @@ export default function ChatScreen() {
   const resolvedSessionIdRef = useRef<string | null>(null);
   const pairingTransitionLogRef = useRef<string | null>(null);
   const suppressPresenceFailureRef = useRef(false);
+  const activeThreadIdRef = useRef<string>("");
+  const subscribedThreadIdRef = useRef<string>("");
 
   const pairing = useSessionStore((state) => state.pairing);
   const pairingFlow = useSessionStore((state) => state.pairingFlow);
@@ -1289,7 +1653,8 @@ export default function ChatScreen() {
 
     const initializePromise = (async () => {
       try {
-        await relayService.requestJson<{ bridgeManaged?: boolean }>(
+        const initializeResponse =
+          await relayService.requestJson<{ bridgeManaged?: boolean }>(
           "initialize",
           {
             protocolVersion: "2024-11-05",
@@ -1304,7 +1669,9 @@ export default function ChatScreen() {
           20_000,
         );
         console.log("[mobile][initialize] initialize response received");
-        await relayService.sendJson(buildRequest("initialized", {}));
+        if (!initializeResponse?.bridgeManaged) {
+          await relayService.sendJson(buildRequest("initialized", {}));
+        }
         codexInitializedRef.current = true;
         console.log("[mobile][initialize] codex protocol initialized");
         return true;
@@ -1385,6 +1752,10 @@ export default function ChatScreen() {
   );
 
   useEffect(() => {
+    activeThreadIdRef.current = normalizedActiveSessionId;
+  }, [normalizedActiveSessionId]);
+
+  useEffect(() => {
     void loadSession()
       .then(() => {
         setSessionLoaded(true);
@@ -1428,7 +1799,9 @@ export default function ChatScreen() {
   }, [pairing?.sessionId, publicKey]);
 
   useEffect(() => {
-    const activeProject = projects.find((project) => project.id === activeProjectId);
+    const activeProject = projects.find(
+      (project) => project.id === activeProjectId,
+    );
     setTelemetryContext({
       pairingStatus: pairingFlow.status,
       pairingSessionId: pairing?.sessionId || pairingFlow.sessionId,
@@ -1504,8 +1877,13 @@ export default function ChatScreen() {
       );
 
       const currentSessionState = useSessionStore.getState();
-      let nextActiveProjectId = currentSessionState.activeProjectId;
-      let nextActiveSessionId = currentSessionState.activeSessionId;
+      const hasCachedProjects = currentSessionState.projects.length > 0;
+      let nextActiveProjectId = hasCachedProjects
+        ? currentSessionState.activeProjectId
+        : null;
+      let nextActiveSessionId = hasCachedProjects
+        ? currentSessionState.activeSessionId
+        : null;
       let didInjectOptimisticSession = false;
       const preservedActiveSessionId = normalizeThreadReference(
         options?.preserveActiveSessionId,
@@ -1769,6 +2147,9 @@ export default function ChatScreen() {
       if (!normalizedThreadId || !relayService.isSecureReady()) {
         return;
       }
+      if (subscribedThreadIdRef.current === normalizedThreadId) {
+        return;
+      }
 
       try {
         await relayService.requestJson(
@@ -1778,6 +2159,7 @@ export default function ChatScreen() {
           },
           20_000,
         );
+        subscribedThreadIdRef.current = normalizedThreadId;
         console.log("[mobile][thread/resume] sent", {
           threadId: normalizedThreadId,
         });
@@ -1791,12 +2173,149 @@ export default function ChatScreen() {
     [],
   );
 
+  const unsubscribeThread = useCallback(
+    async (threadId: string | null | undefined) => {
+      const normalizedThreadId = normalizeThreadReference(threadId);
+      if (!normalizedThreadId || !relayService.isSecureReady()) {
+        return;
+      }
+
+      try {
+        await relayService.requestJson("thread/unsubscribe", {
+          threadId: normalizedThreadId,
+        });
+        if (subscribedThreadIdRef.current === normalizedThreadId) {
+          subscribedThreadIdRef.current = "";
+        }
+        console.log("[mobile][thread/unsubscribe] sent", {
+          threadId: normalizedThreadId,
+        });
+      } catch (error) {
+        console.warn("[mobile][thread/unsubscribe] failed", {
+          threadId: normalizedThreadId,
+          error,
+        });
+      }
+    },
+    [],
+  );
+
+  const syncToActiveThread = useCallback(
+    (
+      threadId: string | null | undefined,
+      options?: { reason?: string; sessionTitle?: string | null },
+    ) => {
+      const normalizedNextThreadId = normalizeThreadReference(threadId);
+      if (!normalizedNextThreadId) {
+        return false;
+      }
+
+      const sessionState = useSessionStore.getState();
+      const normalizedCurrentThreadId = normalizeThreadReference(
+        sessionState.activeSessionId,
+      );
+      if (normalizedCurrentThreadId === normalizedNextThreadId) {
+        return false;
+      }
+
+      if (normalizedCurrentThreadId) {
+        void unsubscribeThread(normalizedCurrentThreadId);
+      }
+
+      const existingProject = sessionState.projects.find((project) =>
+        project.sessions.some(
+          (session) =>
+            normalizeThreadReference(session.id) === normalizedNextThreadId,
+        ),
+      );
+      if (existingProject?.id) {
+        setActiveProject(existingProject.id);
+      }
+
+      pendingFreshThreadIdsRef.current.delete(normalizedNextThreadId);
+      if (
+        manualSessionSelectionGuardRef.current?.threadId ===
+        normalizedNextThreadId
+      ) {
+        manualSessionSelectionGuardRef.current = null;
+      }
+      approvalMessageIdMapRef.current.clear();
+      approvalRequestStateRef.current.clear();
+      setAssistantMessageId(null);
+      setChatLoading(true);
+      replaceMessages([]);
+      setActiveSession(normalizedNextThreadId);
+      void resumeThread(normalizedNextThreadId);
+      void refreshUsageStatus(normalizedNextThreadId).catch((error) => {
+        console.warn(
+          "[mobile][usage/refresh] auto-switch refresh failed",
+          error,
+        );
+      });
+
+      const normalizedSessionTitle = sanitizeSessionTitle(
+        options?.sessionTitle || "",
+      );
+      const shouldRefreshSessionList =
+        !existingProject ||
+        pendingFreshThreadIdsRef.current.has(normalizedNextThreadId) ||
+        options?.reason === "thread_started_notification";
+      if (shouldRefreshSessionList) {
+        void refreshCodexSessions({
+          preserveActiveSessionId: normalizedNextThreadId,
+          preserveActiveSessionTitle: normalizedSessionTitle,
+        }).catch((error) => {
+          console.warn("[mobile][codex/sessions/list] refresh failed", error);
+        });
+        scheduleDelayedSessionRefresh(
+          normalizedNextThreadId,
+          normalizedSessionTitle,
+        );
+      }
+      trackTelemetryEvent("thread_auto_switched", {
+        reason: options?.reason || "sync",
+        thread_id: normalizedNextThreadId,
+      });
+      setSessionLoadTick((value) => value + 1);
+
+      return true;
+    },
+    [
+      refreshCodexSessions,
+      refreshUsageStatus,
+      replaceMessages,
+      resumeThread,
+      scheduleDelayedSessionRefresh,
+      setActiveProject,
+      setActiveSession,
+      unsubscribeThread,
+    ],
+  );
+
   const loadSelectedSession = useCallback(
     (projectId: string, sessionId: string) => {
+      const previousActiveSessionId = normalizeThreadReference(
+        useSessionStore.getState().activeSessionId,
+      );
+      const nextSessionId = normalizeThreadReference(sessionId);
+      if (
+        previousActiveSessionId &&
+        nextSessionId &&
+        previousActiveSessionId !== nextSessionId
+      ) {
+        void unsubscribeThread(previousActiveSessionId);
+      }
+
       trackTelemetryEvent("session_selected", {
         project_id: projectId,
         session_id: sessionId,
       });
+      if (nextSessionId) {
+        manualSessionSelectionGuardRef.current = {
+          threadId: nextSessionId,
+          expiresAt: Date.now() + MANUAL_SESSION_SELECTION_GUARD_MS,
+        };
+      }
       pendingFreshThreadIdsRef.current.clear();
       approvalMessageIdMapRef.current.clear();
       approvalRequestStateRef.current.clear();
@@ -1807,7 +2326,13 @@ export default function ChatScreen() {
       void resumeThread(sessionId);
       setSessionLoadTick((value) => value + 1);
     },
-    [replaceMessages, resumeThread, setActiveProject, setActiveSession],
+    [
+      replaceMessages,
+      resumeThread,
+      setActiveProject,
+      setActiveSession,
+      unsubscribeThread,
+    ],
   );
 
   const ensureActiveThread = useCallback(
@@ -1941,6 +2466,7 @@ export default function ChatScreen() {
         codexInitializedRef.current = false;
         initializePromiseRef.current = null;
         bootstrappedReadySessionId = null;
+        subscribedThreadIdRef.current = "";
       }
       if (
         presence === "offline" &&
@@ -1969,6 +2495,7 @@ export default function ChatScreen() {
         session_id: activeRelaySessionId,
       });
       setIsConnected(true);
+      subscribedThreadIdRef.current = "";
       codexInitializedRef.current = false;
       initializePromiseRef.current = null;
       void (async () => {
@@ -1995,6 +2522,20 @@ export default function ChatScreen() {
           });
         }
         markPairingConnected(nextSessionId);
+        const sessionState = useSessionStore.getState();
+        const hasCachedActiveSession = sessionState.projects.some((project) =>
+          project.sessions.some(
+            (session) =>
+              normalizeThreadReference(session.id) ===
+              normalizeThreadReference(sessionState.activeSessionId),
+          ),
+        );
+        const sessionToResume = normalizeThreadReference(
+          hasCachedActiveSession ? sessionState.activeSessionId : null,
+        );
+        if (sessionToResume) {
+          void resumeThread(sessionToResume);
+        }
 
         void refreshCodexSessions().catch((error) => {
           console.warn("[mobile][codex/sessions/list] refresh failed", error);
@@ -2028,23 +2569,36 @@ export default function ChatScreen() {
         params?: RelayMessageParams;
       };
 
+      const method = String(message.method || "");
+      const params = message.params;
+      if (method && isImmediateDuplicateMessage(method, params)) {
+        return;
+      }
       console.log("[mobile][message]", message.method, message.params);
 
-      const params = message.params;
       const eventPayload = params?.msg || params;
+      const messageThreadId = extractMessageThreadId(params);
+      const activeThreadId = activeThreadIdRef.current;
+      const shouldBypassThreadScopeFilter = method === "thread/started";
+      if (
+        method &&
+        !shouldBypassThreadScopeFilter &&
+        isChatThreadScopedMethod(method) &&
+        activeThreadId &&
+        messageThreadId &&
+        messageThreadId !== activeThreadId
+      ) {
+        return;
+      }
 
       if (message.method === "thread/started") {
         const startedThreadId = normalizeThreadReference(
           params?.threadId || params?.thread?.id || params?.thread?.threadId,
         );
         if (startedThreadId) {
-          setActiveSession(startedThreadId);
-          void refreshCodexSessions({
-            preserveActiveSessionId: startedThreadId,
-          }).catch((error) => {
-            console.warn("[mobile][codex/sessions/list] refresh failed", error);
+          syncToActiveThread(startedThreadId, {
+            reason: "thread_started_notification",
           });
-          scheduleDelayedSessionRefresh(startedThreadId);
         }
       }
 
@@ -2070,14 +2624,24 @@ export default function ChatScreen() {
         }
       }
 
+      const itemObject = incomingItemObject(params);
+
       const resolveItemId = () =>
         String(
           eventPayload?.itemId ||
             eventPayload?.item_id ||
             eventPayload?.call_id ||
             eventPayload?.callId ||
+            params?.item?.id ||
+            params?.item?.itemId ||
+            params?.item?.item_id ||
             "",
         );
+
+      const resolveItemObjectId = () =>
+        String(
+          itemObject?.id || itemObject?.itemId || itemObject?.item_id || "",
+        ).trim();
 
       const getExistingAssistantText = (id: string | null | undefined) => {
         const normalizedId = String(id || "").trim();
@@ -2114,6 +2678,100 @@ export default function ChatScreen() {
           });
         }
         return commandId;
+      };
+
+      const resolveCommandEnvelope = () => {
+        const itemCommandExecution = itemObject?.commandExecution;
+        const itemStatusObject =
+          itemObject?.status && typeof itemObject.status === "object"
+            ? itemObject.status
+            : undefined;
+        const eventStatusObject =
+          eventPayload?.status && typeof eventPayload.status === "object"
+            ? eventPayload.status
+            : undefined;
+        const command = [
+          itemCommandExecution?.command,
+          itemObject?.command,
+          itemObject?.cmd,
+          eventPayload?.command,
+          eventPayload?.cmd,
+          itemObject?.raw_command,
+          itemObject?.rawCommand,
+          eventPayload?.raw_command,
+          eventPayload?.rawCommand,
+        ]
+          .map((candidate) => stringifyCommandValue(candidate))
+          .find(Boolean);
+        const cwd = String(
+          itemCommandExecution?.workingDirectory ||
+            itemObject?.cwd ||
+            itemObject?.working_directory ||
+            eventPayload?.cwd ||
+            eventPayload?.working_directory ||
+            "",
+        ).trim();
+        const outputDelta =
+          itemCommandExecution?.outputDelta ||
+          itemCommandExecution?.textDelta ||
+          itemCommandExecution?.chunk ||
+          params?.delta ||
+          params?.textDelta ||
+          params?.text_delta ||
+          params?.chunk ||
+          eventPayload?.delta ||
+          eventPayload?.textDelta ||
+          eventPayload?.text_delta ||
+          eventPayload?.chunk ||
+          "";
+        const output =
+          itemCommandExecution?.output ||
+          itemObject?.output ||
+          params?.output ||
+          eventPayload?.output ||
+          "";
+        const exitCode =
+          itemCommandExecution?.exitCode ??
+          itemCommandExecution?.exit_code ??
+          itemObject?.exitCode ??
+          itemObject?.exit_code ??
+          params?.exitCode ??
+          params?.exit_code ??
+          eventPayload?.exitCode ??
+          eventPayload?.exit_code;
+        const duration =
+          itemCommandExecution?.duration ??
+          itemCommandExecution?.durationMs ??
+          itemCommandExecution?.duration_ms ??
+          itemObject?.durationMs ??
+          itemObject?.duration_ms ??
+          params?.durationMs ??
+          params?.duration_ms ??
+          eventPayload?.durationMs ??
+          eventPayload?.duration_ms;
+        const status = resolveCommandExecutionStatus(
+          itemCommandExecution?.status ||
+            itemStatusObject?.type ||
+            itemStatusObject?.statusType ||
+            itemStatusObject?.status_type ||
+            itemObject?.status ||
+            eventStatusObject?.type ||
+            eventStatusObject?.statusType ||
+            eventStatusObject?.status_type ||
+            eventPayload?.status,
+          typeof exitCode === "number" ? exitCode : undefined,
+        );
+
+        return {
+          itemId: resolveItemId() || resolveItemObjectId(),
+          command: command || "Running command...",
+          cwd,
+          outputDelta: String(outputDelta || ""),
+          output: String(output || ""),
+          status,
+          exitCode: typeof exitCode === "number" ? exitCode : undefined,
+          duration: typeof duration === "number" ? duration : undefined,
+        };
       };
 
       const resolveApprovalRequestId = () => {
@@ -2289,12 +2947,9 @@ export default function ChatScreen() {
       }
 
       if (message.method === "item/agentMessage/delta") {
-        const itemObject = incomingItemObject(params);
         const id =
           resolveItemId() ||
-          String(
-            itemObject?.id || itemObject?.itemId || itemObject?.item_id || "",
-          ).trim() ||
+          resolveItemObjectId() ||
           assistantMessageId ||
           `assistant-${Date.now()}`;
         const delta =
@@ -2323,14 +2978,9 @@ export default function ChatScreen() {
         message.method === "item/completed" ||
         message.method === "codex/event/item_completed"
       ) {
-        const itemObject = incomingItemObject(params);
         if (isAssistantMessageItem(itemObject)) {
           const id =
-            resolveItemId() ||
-            String(
-              itemObject?.id || itemObject?.itemId || itemObject?.item_id || "",
-            ).trim() ||
-            assistantMessageId;
+            resolveItemId() || resolveItemObjectId() || assistantMessageId;
           const text = String(
             itemObject?.message ||
               itemObject?.text ||
@@ -2349,6 +2999,31 @@ export default function ChatScreen() {
           }
           if (id) {
             completeAssistantMessage(id);
+          }
+        }
+
+        if (isCommandExecutionItem(itemObject)) {
+          const commandState = resolveCommandEnvelope();
+          if (commandState.itemId) {
+            const commandId = ensureCommandMessage(commandState.itemId, {
+              command: commandState.command,
+              cwd: commandState.cwd,
+            });
+            updateCommandExecution(commandId, {
+              output: commandState.outputDelta || commandState.output,
+              status: commandState.status || "completed",
+              exitCode: commandState.exitCode,
+              duration: commandState.duration,
+            });
+          }
+        }
+
+        if (isFileChangeItem(itemObject)) {
+          const incomingFileChanges = Array.isArray(itemObject?.fileChanges)
+            ? itemObject.fileChanges
+            : [];
+          if (incomingFileChanges.length > 0) {
+            addFileChanges(incomingFileChanges);
           }
         }
       }
@@ -2404,25 +3079,50 @@ export default function ChatScreen() {
         }
       }
 
-      // Handle command execution - new protocol
-      if (message.method === "item/commandExecution/outputDelta") {
-        const itemId = resolveItemId();
-        const delta = params?.delta || params?.textDelta || params?.chunk || "";
-        const command = String(
-          eventPayload?.command ||
-            eventPayload?.cmd ||
-            eventPayload?.raw_command ||
-            eventPayload?.rawCommand ||
-            "",
-        );
-        const cwd = String(
-          eventPayload?.cwd || eventPayload?.working_directory || "",
-        );
+      if (
+        message.method === "item/started" &&
+        isCommandExecutionItem(itemObject)
+      ) {
+        const commandState = resolveCommandEnvelope();
+        if (commandState.itemId) {
+          ensureCommandMessage(commandState.itemId, {
+            command: commandState.command,
+            cwd: commandState.cwd,
+          });
+        }
+      }
 
-        if (itemId && delta) {
-          const commandId = ensureCommandMessage(itemId, { command, cwd });
+      if (
+        message.method === "item/updated" &&
+        isCommandExecutionItem(itemObject)
+      ) {
+        const commandState = resolveCommandEnvelope();
+        if (commandState.itemId && commandState.outputDelta) {
+          const commandId = ensureCommandMessage(commandState.itemId, {
+            command: commandState.command,
+            cwd: commandState.cwd,
+          });
           updateCommandExecution(commandId, {
-            output: delta,
+            output: commandState.outputDelta,
+            status: commandState.status,
+          });
+        }
+      }
+
+      // Handle command execution - new protocol
+      if (
+        message.method === "item/commandExecution/outputDelta" ||
+        message.method === "item/commandExecution/updated"
+      ) {
+        const commandState = resolveCommandEnvelope();
+        if (commandState.itemId && commandState.outputDelta) {
+          const commandId = ensureCommandMessage(commandState.itemId, {
+            command: commandState.command,
+            cwd: commandState.cwd,
+          });
+          updateCommandExecution(commandId, {
+            output: commandState.outputDelta,
+            status: commandState.status,
           });
         }
       }
@@ -2574,10 +3274,10 @@ export default function ChatScreen() {
     refreshUsageStatus,
     clearPairingConnectTimeout,
     markPairingConnected,
-    scheduleDelayedSessionRefresh,
     setPairing,
-    setActiveSession,
     setDiffSnapshot,
+    resumeThread,
+    syncToActiveThread,
   ]);
 
   useEffect(() => {
@@ -2611,6 +3311,85 @@ export default function ChatScreen() {
   }, [pairing, pairingFlow.status, projects, refreshCodexSessions]);
 
   useEffect(() => {
+    if (!pairing || pairingFlow.status !== "connected") {
+      return;
+    }
+
+    let isCancelled = false;
+    let inFlight = false;
+
+    const pollActiveSession = async () => {
+      if (isCancelled || inFlight || !relayService.isSecureReady()) {
+        return;
+      }
+
+      const now = Date.now();
+      if (now - lastActiveSessionPollAtMs < ACTIVE_SESSION_SYNC_POLL_MS - 200) {
+        return;
+      }
+      lastActiveSessionPollAtMs = now;
+
+      inFlight = true;
+      try {
+        const result = await relayService.requestJson<CodexActiveSessionResult>(
+          "codex/sessions/active",
+          {
+            limit: 150,
+          },
+          10_000,
+        );
+        const syncedThreadId = normalizeThreadReference(
+          result?.activeSessionId ||
+            result?.session?.sessionId ||
+            result?.session?.threadId,
+        );
+        if (!syncedThreadId) {
+          return;
+        }
+
+        const manualSelectionGuard = manualSessionSelectionGuardRef.current;
+        if (manualSelectionGuard) {
+          if (manualSelectionGuard.expiresAt <= Date.now()) {
+            manualSessionSelectionGuardRef.current = null;
+          } else if (manualSelectionGuard.threadId === syncedThreadId) {
+            manualSessionSelectionGuardRef.current = null;
+          } else {
+            const currentActiveThreadId = normalizeThreadReference(
+              useSessionStore.getState().activeSessionId,
+            );
+            if (currentActiveThreadId === manualSelectionGuard.threadId) {
+              return;
+            }
+            manualSessionSelectionGuardRef.current = null;
+          }
+        }
+
+        syncToActiveThread(syncedThreadId, {
+          reason:
+            result?.source === "remembered"
+              ? "bridge_active_remembered"
+              : "bridge_active_recent",
+          sessionTitle: result?.session?.title || null,
+        });
+      } catch (error) {
+        console.warn("[mobile][codex/sessions/active] poll failed", error);
+      } finally {
+        inFlight = false;
+      }
+    };
+
+    void pollActiveSession();
+    const timer = setInterval(() => {
+      void pollActiveSession();
+    }, ACTIVE_SESSION_SYNC_POLL_MS);
+
+    return () => {
+      isCancelled = true;
+      clearInterval(timer);
+    };
+  }, [pairing, pairingFlow.status, syncToActiveThread]);
+
+  useEffect(() => {
     async function connect() {
       if (!sessionLoaded) {
         return;
@@ -2636,7 +3415,9 @@ export default function ChatScreen() {
         return;
       }
 
-      const attemptKey = `${pairing.sessionId}:${pairing.expiryMs}`;
+      // Treat one scanned QR as a single connect attempt even if the live
+      // session id later changes via trusted-session resolve.
+      const attemptKey = `${pairing.relayUrl}:${pairing.bridgeIdentityPublicKey}:${pairing.expiryMs}`;
       if (pairingAttemptKeyRef.current === attemptKey) {
         return;
       }
@@ -3031,14 +3812,17 @@ export default function ChatScreen() {
     }
   }
 
-  const scrollToBottom = useCallback((animated = true) => {
-    trackTelemetryEvent("chat_scroll_to_bottom", {
-      animated,
-      has_messages: renderItems.length > 0,
-    });
-    messageScrollViewRef.current?.scrollToEnd({ animated });
-    setShowScrollToBottom(false);
-  }, [renderItems.length]);
+  const scrollToBottom = useCallback(
+    (animated = true) => {
+      trackTelemetryEvent("chat_scroll_to_bottom", {
+        animated,
+        has_messages: renderItems.length > 0,
+      });
+      messageScrollViewRef.current?.scrollToEnd({ animated });
+      setShowScrollToBottom(false);
+    },
+    [renderItems.length],
+  );
 
   const showConnectingScreen = pairingFlow.status === "connecting";
 
@@ -3096,6 +3880,12 @@ export default function ChatScreen() {
           setSidebarOpen(false);
         }}
         onNewChat={() => {
+          const previousActiveSessionId = normalizeThreadReference(
+            useSessionStore.getState().activeSessionId,
+          );
+          if (previousActiveSessionId) {
+            void unsubscribeThread(previousActiveSessionId);
+          }
           trackTelemetryEvent("chat_new_session_started");
           pendingFreshThreadIdsRef.current.clear();
           approvalMessageIdMapRef.current.clear();
@@ -3187,9 +3977,18 @@ export default function ChatScreen() {
                 projectName={activeProject?.name}
                 projects={projects}
                 onProjectSelect={(projectId) => {
-                  trackTelemetryEvent("chat_project_selected_from_empty_state", {
-                    has_project_id: Boolean(projectId),
-                  });
+                  const previousActiveSessionId = normalizeThreadReference(
+                    useSessionStore.getState().activeSessionId,
+                  );
+                  if (previousActiveSessionId) {
+                    void unsubscribeThread(previousActiveSessionId);
+                  }
+                  trackTelemetryEvent(
+                    "chat_project_selected_from_empty_state",
+                    {
+                      has_project_id: Boolean(projectId),
+                    },
+                  );
                   pendingFreshThreadIdsRef.current.clear();
                   approvalMessageIdMapRef.current.clear();
                   approvalRequestStateRef.current.clear();

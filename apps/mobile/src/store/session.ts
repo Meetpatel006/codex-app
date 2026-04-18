@@ -350,6 +350,11 @@ export const useSessionStore = create<SessionStore>((set, get) => ({
     let parsedActiveProjectId = activeProjectId || null;
     let parsedActiveSessionId = activeSessionId || null;
 
+    if (!projectsRaw) {
+      parsedActiveProjectId = null;
+      parsedActiveSessionId = null;
+    }
+
     if (isLegacyMockProjects(parsedProjects)) {
       parsedProjects = [];
       parsedActiveProjectId = null;

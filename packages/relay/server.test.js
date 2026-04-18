@@ -398,7 +398,7 @@ test("websocket relay forwards between mac and iphone on the base relay path", a
   });
 });
 
-test("relay keeps the iPhone connected briefly but rejects new sends while the mac is absent", async () => {
+test("relay keeps the iPhone connected briefly and buffers sends while the mac is absent", async () => {
   await withServer(async ({ port }) => {
     const mac = new WebSocket(`ws://127.0.0.1:${port}/relay/session-grace`, {
       headers: { "x-role": "mac" },
@@ -421,12 +421,21 @@ test("relay keeps the iPhone connected briefly but rejects new sends while the m
     await delay(40);
     assert.equal(iphoneClosed, false);
 
-    const closeDetails = onceCloseDetails(iphone);
     iphone.send(JSON.stringify({ buffered: true }));
 
-    const { code, reason } = await closeDetails;
-    assert.equal(code, 4004);
-    assert.equal(reason, "Mac temporarily unavailable");
+    const reconnectedMac = new WebSocket(`ws://127.0.0.1:${port}/relay/session-grace`, {
+      headers: { "x-role": "mac" },
+    });
+    const replayed = onceMessage(reconnectedMac);
+    await onceOpen(reconnectedMac);
+
+    assert.equal(await withTimeout(replayed, 2_000, "timed out waiting for buffered replay"), "{\"buffered\":true}");
+
+    const iphoneClose = onceClosed(iphone);
+    const reconnectedMacClose = onceClosed(reconnectedMac);
+    iphone.close();
+    reconnectedMac.close();
+    await Promise.all([iphoneClose, reconnectedMacClose]);
   }, {
     relayOptions: {
       macAbsenceGraceMs: 250,
@@ -480,7 +489,7 @@ test("relay lets the iPhone reconnect during the mac absence grace window", asyn
   });
 });
 
-test("relay closes with a dedicated code when the iphone sends during mac absence", async () => {
+test("relay closes with session unavailable after grace when the iphone sends", async () => {
   await withServer(async ({ port }) => {
     const mac = new WebSocket(`ws://127.0.0.1:${port}/relay/session-buffer-full`, {
       headers: { "x-role": "mac" },
@@ -496,11 +505,12 @@ test("relay closes with a dedicated code when the iphone sends during mac absenc
     await macClosed;
 
     const closeDetails = onceCloseDetails(iphone);
+    await delay(300);
     iphone.send(JSON.stringify({ buffered: 1 }));
 
     const { code, reason } = await closeDetails;
-    assert.equal(code, 4004);
-    assert.equal(reason, "Mac temporarily unavailable");
+    assert.equal(code, 4002);
+    assert.equal(reason, "Mac disconnected");
   }, {
     relayOptions: {
       macAbsenceGraceMs: 250,
@@ -588,6 +598,17 @@ function delay(milliseconds) {
   return new Promise((resolve) => {
     setTimeout(resolve, milliseconds);
   });
+}
+
+function withTimeout(promise, timeoutMs, message) {
+  return Promise.race([
+    promise,
+    new Promise((_, reject) => {
+      setTimeout(() => {
+        reject(new Error(message));
+      }, timeoutMs);
+    }),
+  ]);
 }
 
 function makePhoneIdentity() {

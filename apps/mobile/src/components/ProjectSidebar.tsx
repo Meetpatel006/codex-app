@@ -74,9 +74,6 @@ export const ProjectSidebar: React.FC<ProjectSidebarProps> = ({
   const activeProjectId = useSessionStore((state) => state.activeProjectId);
   const activeSessionId = useSessionStore((state) => state.activeSessionId);
   const setActiveProject = useSessionStore((state) => state.setActiveProject);
-  const updateProjectLastActive = useSessionStore(
-    (state) => state.updateProjectLastActive,
-  );
 
   const [expandedByProject, setExpandedByProject] = useState<ExpandedState>({});
   const [sortDirection, setSortDirection] = useState<"asc" | "desc">("asc");
@@ -197,7 +194,6 @@ export const ProjectSidebar: React.FC<ProjectSidebarProps> = ({
   const handleSessionPress = (projectId: string, sessionId: string) => {
     setActiveProject(projectId); // Mark as active to keep expanded when reopened
     setExpandedByProject((curr) => ({ ...curr, [projectId]: true })); // Explicit expansion
-    updateProjectLastActive(projectId, sessionId);
     onSessionSelect(projectId, sessionId);
     onClose();
   };

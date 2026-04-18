@@ -125,6 +125,8 @@ export class RelayService {
     // Ensure there is only one active iPhone socket at a time.
     if (this.socket && this.socket.readyState !== WebSocket.CLOSED) {
       const previousSocket = this.socket;
+      previousSocket.onopen = null;
+      previousSocket.onmessage = null;
       previousSocket.onclose = null;
       previousSocket.onerror = null;
       try {
@@ -167,6 +169,10 @@ export class RelayService {
     );
 
     socket.onopen = () => {
+      if (this.socket !== socket || generation !== this.socketGeneration) {
+        return;
+      }
+
       this.reconnectAttempts = 0;
       this.emit("presence", "connecting");
       console.log(`[mobile][relay] socket open session=${options.sessionId}`);
@@ -185,6 +191,10 @@ export class RelayService {
     };
 
     socket.onmessage = async (event) => {
+      if (this.socket !== socket || generation !== this.socketGeneration) {
+        return;
+      }
+
       try {
         const raw =
           typeof event.data === "string" ? event.data : String(event.data);

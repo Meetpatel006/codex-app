@@ -12,6 +12,8 @@ const CLOSE_CODE_SESSION_UNAVAILABLE = 4002;
 const CLOSE_CODE_IPHONE_REPLACED = 4003;
 const CLOSE_CODE_MAC_ABSENCE_BUFFER_FULL = 4004;
 const MAC_ABSENCE_GRACE_MS = 15_000;
+const MAX_MAC_ABSENCE_BUFFER_MESSAGES = 128;
+const MAX_MAC_ABSENCE_BUFFER_BYTES = 512 * 1024;
 const TRUSTED_SESSION_RESOLVE_TAG = "remodex-trusted-session-resolve-v1";
 const TRUSTED_SESSION_RESOLVE_SKEW_MS = 90_000;
 
@@ -71,6 +73,8 @@ function setupRelay(
         mac: null,
         macRegistration: null,
         clients: new Set(),
+        bufferedIphoneMessages: [],
+        bufferedIphoneBytes: 0,
         cleanupTimer: null,
         macAbsenceTimer: null,
         notificationSecret: null,
@@ -99,6 +103,7 @@ function setupRelay(
         session.mac.close(4001, "Replaced by new Mac connection");
       }
       session.mac = ws;
+      flushBufferedIphoneMessages(session);
       registerLiveMacSession(session.macRegistration);
       console.log(`[relay] Mac connected -> ${relaySessionLogLabel(sessionId)}`);
     } else {
@@ -140,11 +145,16 @@ function setupRelay(
         }
       } else if (session.mac?.readyState === WebSocket.OPEN) {
         session.mac.send(msg);
+      } else if (session.macAbsenceTimer) {
+        const bufferResult = bufferIphoneMessage(session, msg);
+        if (!bufferResult.ok) {
+          // Protect relay memory when the Mac stays absent while the phone keeps sending.
+          ws.close(CLOSE_CODE_MAC_ABSENCE_BUFFER_FULL, bufferResult.reason);
+        }
       } else {
         // The relay cannot prove a buffered request really reached the bridge after
-        // a reconnect, so fail fast with an explicit retry-required close instead
-        // of silently dropping queued client work during a later flush.
-        ws.close(CLOSE_CODE_MAC_ABSENCE_BUFFER_FULL, "Mac temporarily unavailable");
+        // a reconnect once the absence grace window has elapsed.
+        ws.close(CLOSE_CODE_SESSION_UNAVAILABLE, "Mac session not available");
       }
     });
 
@@ -289,11 +299,51 @@ function canAcceptIphoneConnection(session) {
 }
 
 function closeSessionClients(session, code, reason) {
+  clearBufferedIphoneMessages(session);
   for (const client of session.clients) {
     if (client.readyState === WebSocket.OPEN || client.readyState === WebSocket.CONNECTING) {
       client.close(code, reason);
     }
   }
+}
+
+function bufferIphoneMessage(session, msg) {
+  const sizeBytes = Buffer.byteLength(msg, "utf8");
+  if (sizeBytes <= 0) {
+    return { ok: false, reason: "Mac temporarily unavailable" };
+  }
+
+  if (session.bufferedIphoneMessages.length >= MAX_MAC_ABSENCE_BUFFER_MESSAGES) {
+    return { ok: false, reason: "Mac temporarily unavailable" };
+  }
+
+  if (session.bufferedIphoneBytes + sizeBytes > MAX_MAC_ABSENCE_BUFFER_BYTES) {
+    return { ok: false, reason: "Mac temporarily unavailable" };
+  }
+
+  session.bufferedIphoneMessages.push(msg);
+  session.bufferedIphoneBytes += sizeBytes;
+  return { ok: true };
+}
+
+function flushBufferedIphoneMessages(session) {
+  if (!session.mac || session.mac.readyState !== WebSocket.OPEN) {
+    return;
+  }
+
+  for (const buffered of session.bufferedIphoneMessages) {
+    if (session.mac.readyState !== WebSocket.OPEN) {
+      break;
+    }
+    session.mac.send(buffered);
+  }
+
+  clearBufferedIphoneMessages(session);
+}
+
+function clearBufferedIphoneMessages(session) {
+  session.bufferedIphoneMessages.length = 0;
+  session.bufferedIphoneBytes = 0;
 }
 
 function relaySessionLogLabel(sessionId) {
