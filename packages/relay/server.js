@@ -1,5 +1,5 @@
 // FILE: server.js
-// Purpose: Hosts the public Remodex relay transport and trusted-session resolve endpoint.
+// Purpose: Hosts the public Portdex relay transport and trusted-session resolve endpoint.
 // Layer: Standalone server entrypoint
 // Exports: createRelayServer, createFixedWindowRateLimiter
 // Depends on: http, ws, ./relay
@@ -327,12 +327,12 @@ function createFixedWindowRateLimiter({ windowMs, maxRequests, now = () => Date.
 
 if (require.main === module) {
   const port = Number(process.env.PORT || 9000);
-  const trustProxy = readOptionalBooleanEnv(["REMODEX_TRUST_PROXY", "PHODEX_TRUST_PROXY"]) ?? false;
+  const trustProxy = readOptionalBooleanEnv(["PORTDEX_TRUST_PROXY", "PHODEX_TRUST_PROXY"]) ?? false;
   const enablePushService = readOptionalBooleanEnv(
-    ["REMODEX_ENABLE_PUSH_SERVICE", "PHODEX_ENABLE_PUSH_SERVICE"]
+    ["PORTDEX_ENABLE_PUSH_SERVICE", "PHODEX_ENABLE_PUSH_SERVICE"]
   ) ?? false;
   if (enablePushService) {
-    console.warn("[relay] push service is not enabled in this fork; ignoring REMODEX_ENABLE_PUSH_SERVICE.");
+    console.warn("[relay] push service is not enabled in this fork; ignoring PORTDEX_ENABLE_PUSH_SERVICE.");
   }
   const { server } = createRelayServer({ trustProxy });
   server.listen(port, () => {

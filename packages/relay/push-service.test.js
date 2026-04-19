@@ -17,7 +17,7 @@ const {
 } = require("./push-service");
 
 test("push service stores device registration and sends one completion alert", async () => {
-  const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), "remodex-push-state-"));
+  const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), "portdex-push-state-"));
   const sent = [];
   const service = createPushSessionService({
     apnsClient: {
@@ -142,7 +142,7 @@ test("push service rejects completion sends once the live relay session is gone"
 });
 
 test("push service reloads registrations from persisted state after a restart", async () => {
-  const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), "remodex-push-state-"));
+  const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), "portdex-push-state-"));
   const stateFilePath = path.join(tempDir, "push-state.json");
   const firstSent = [];
 
@@ -190,14 +190,14 @@ test("push service reloads registrations from persisted state after a restart", 
   }
 });
 
-test("push service defaults to a durable state file in the remodex home dir", () => {
+test("push service defaults to a durable state file in the portdex home dir", () => {
   const resolved = resolvePushStateFilePath({
     CODEX_HOME: "/tmp/codex-home",
   });
 
   assert.equal(
     path.normalize(resolved),
-    path.join(path.sep, "tmp", "codex-home", "remodex", "push-state.json"),
+    path.join(path.sep, "tmp", "codex-home", "portdex", "push-state.json"),
   );
 });
 

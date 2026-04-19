@@ -252,7 +252,7 @@ function resolveThreadId(threadId) {
     return last.threadId;
   }
 
-  throw new Error("No thread id provided and no remembered Remodex thread found.");
+  throw new Error("No thread id provided and no remembered thread found.");
 }
 
 function resolveSessionsRoot() {

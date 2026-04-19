@@ -79,7 +79,7 @@ function rememberTrustedPhone(state, phoneDeviceId, phoneIdentityPublicKey, { pe
     return state;
   }
 
-  // Remodex supports one trusted iPhone per Mac, so a new trust record replaces old ones.
+  // supports one trusted iPhone per Mac, so a new trust record replaces old ones.
   const nextState = normalizeBridgeDeviceState({
     ...state,
     trustedPhones: {
@@ -362,7 +362,7 @@ function normalizeNonEmptyString(value) {
 function corruptedStateError(source, error) {
   const detail = normalizeNonEmptyString(error?.message);
   return new Error(
-    `The saved Remodex pairing state in ${source} is unreadable. `
+    `The saved Portdex pairing state in ${source} is unreadable. `
       + "Run `portdex reset-pairing` to start fresh."
       + (detail ? ` (${detail})` : "")
   );

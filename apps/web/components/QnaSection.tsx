@@ -8,7 +8,7 @@ const qnaItems = [
   {
     question: "How does Portdex Mobile connect to my desktop?",
     answer:
-      "Scan the QR code displayed by the remodex bridge on your desktop. The connection is encrypted end-to-end using cryptographic key pairs stored securely on your device.",
+      "Scan the QR code displayed by the Portdex bridge on your desktop. The connection is encrypted end-to-end using cryptographic key pairs stored securely on your device.",
   },
   {
     question: "Is my code sent to the cloud?",

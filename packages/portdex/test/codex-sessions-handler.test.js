@@ -279,8 +279,8 @@ test("codex/sessions/list logs the empty title fallback at most once per rollout
 
   const previousCodexHome = process.env.CODEX_HOME;
   process.env.CODEX_HOME = homeDir;
-  const previousDebugSessions = process.env.REMODEX_DEBUG_SESSIONS;
-  process.env.REMODEX_DEBUG_SESSIONS = "1";
+  const previousDebugSessions = process.env.PORTDEX_DEBUG_SESSIONS;
+  process.env.PORTDEX_DEBUG_SESSIONS = "1";
   const originalConsoleLog = console.log;
   const capturedLogs = [];
   console.log = (...args) => {
@@ -295,9 +295,9 @@ test("codex/sessions/list logs the empty title fallback at most once per rollout
       process.env.CODEX_HOME = previousCodexHome;
     }
     if (previousDebugSessions == null) {
-      delete process.env.REMODEX_DEBUG_SESSIONS;
+      delete process.env.PORTDEX_DEBUG_SESSIONS;
     } else {
-      process.env.REMODEX_DEBUG_SESSIONS = previousDebugSessions;
+      process.env.PORTDEX_DEBUG_SESSIONS = previousDebugSessions;
     }
     fs.rmSync(homeDir, { recursive: true, force: true });
   });

@@ -384,7 +384,7 @@ class CodexDesktopRefresher {
     this.fallbackTimer = null;
   }
 
-  // Keeps one lightweight rollout watcher alive for the current Remodex-controlled thread.
+  // Keeps one lightweight rollout watcher alive for the current Portdex-controlled thread.
   ensureWatcher(threadId) {
     if (!this.canRefresh() || !threadId) {
       return;

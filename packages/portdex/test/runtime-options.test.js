@@ -20,10 +20,10 @@ test("parseRuntimeOptions merges CLI args and env vars with CLI precedence", () 
   const options = parseRuntimeOptions({
     args: { model: "gpt-4", thinking: "high" },
     env: {
-      REMODEX_MODEL: "gpt-3.5",
-      REMODEX_THINKING: "low",
-      REMODEX_PERMISSION: "full",
-      REMODEX_BRANCH: "main",
+      PORTDEX_MODEL: "gpt-3.5",
+      PORTDEX_THINKING: "low",
+      PORTDEX_PERMISSION: "full",
+      PORTDEX_BRANCH: "main",
     },
   });
 
@@ -73,7 +73,7 @@ test("parseRuntimeOptions normalizes transport type to lowercase", () => {
 test("validateRuntimeOptions throws when type=cloud without endpoint", () => {
   assert.throws(
     () => validateRuntimeOptions({ type: "cloud" }, { codexEndpoint: "" }),
-    /type=cloud requires REMODEX_CODEX_ENDPOINT/,
+    /type=cloud requires PORTDEX_CODEX_ENDPOINT/,
   );
 });
 

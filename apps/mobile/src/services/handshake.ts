@@ -89,7 +89,7 @@ export async function deriveSessionKey(params: {
     sha256,
     sharedSecret,
     salt,
-    utf8ToBytes("remodex-session-v1"),
+    utf8ToBytes("portdex-session-v1"),
     32,
   );
   return importAesKey(rawKey);

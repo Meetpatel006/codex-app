@@ -26,21 +26,21 @@ const {
 
 const macOnlyTest = process.platform === "darwin" ? test : test.skip;
 
-test("buildLaunchAgentPlist points launchd at run-service with remodex state paths", () => {
+test("buildLaunchAgentPlist points launchd at run-service with portdex state paths", () => {
   const plist = buildLaunchAgentPlist({
     homeDir: "/Users/tester",
     pathEnv: "/usr/local/bin:/usr/bin",
-    stateDir: "/Users/tester/.remodex",
-    stdoutLogPath: "/Users/tester/.remodex/logs/bridge.stdout.log",
-    stderrLogPath: "/Users/tester/.remodex/logs/bridge.stderr.log",
+    stateDir: "/Users/tester/.portdex",
+    stdoutLogPath: "/Users/tester/.portdex/logs/bridge.stdout.log",
+    stderrLogPath: "/Users/tester/.portdex/logs/bridge.stderr.log",
     nodePath: "/usr/local/bin/node",
-    cliPath: "/tmp/remodex/bin/remodex.js",
+    cliPath: "/tmp/portdex/bin/portdex.js",
   });
 
-  assert.match(plist, /<string>com\.remodex\.bridge<\/string>/);
+  assert.match(plist, /<string>com\.portdex\.bridge<\/string>/);
   assert.match(plist, /<string>run-service<\/string>/);
   assert.match(plist, /<key>KeepAlive<\/key>\s*<dict>\s*<key>SuccessfulExit<\/key>\s*<false\/>\s*<\/dict>/);
-  assert.match(plist, /<key>REMODEX_DEVICE_STATE_DIR<\/key>/);
+  assert.match(plist, /<key>PORTDEX_DEVICE_STATE_DIR<\/key>/);
 });
 
 test("resolveLaunchAgentPlistPath writes into the user's LaunchAgents folder", () => {
@@ -49,7 +49,7 @@ test("resolveLaunchAgentPlistPath writes into the user's LaunchAgents folder", (
       env: { HOME: "/Users/tester" },
       osImpl: { homedir: () => "/Users/fallback" },
     }),
-    path.join("/Users/tester", "Library", "LaunchAgents", "com.remodex.bridge.plist")
+    path.join("/Users/tester", "Library", "LaunchAgents", "com.portdex.bridge.plist")
   );
 });
 
@@ -94,14 +94,14 @@ macOnlyTest("stopMacOSBridgeService falls back to label bootout when plist booto
         [
           "bootout",
           `gui/${process.getuid()}`,
-          path.join(process.env.HOME, "Library", "LaunchAgents", "com.remodex.bridge.plist"),
+          path.join(process.env.HOME, "Library", "LaunchAgents", "com.portdex.bridge.plist"),
         ],
       ],
       [
         "launchctl",
         [
           "bootout",
-          `gui/${process.getuid()}/com.remodex.bridge`,
+          `gui/${process.getuid()}/com.portdex.bridge`,
         ],
       ],
     ]);
@@ -160,13 +160,13 @@ macOnlyTest("getMacOSBridgeServiceStatus reports launchd + runtime metadata toge
     writePairingSession({ sessionId: "session-2" });
     writeBridgeStatus({ state: "running", connectionStatus: "connected", pid: 55 });
 
-    const plistPath = path.join(rootDir, "LaunchAgents", "com.remodex.bridge.plist");
+    const plistPath = path.join(rootDir, "LaunchAgents", "com.portdex.bridge.plist");
     fs.mkdirSync(path.dirname(plistPath), { recursive: true });
     fs.writeFileSync(plistPath, "plist");
 
     const status = getMacOSBridgeServiceStatus({
       platform: "darwin",
-      env: { HOME: rootDir, REMODEX_DEVICE_STATE_DIR: rootDir },
+      env: { HOME: rootDir, PORTDEX_DEVICE_STATE_DIR: rootDir },
       execFileSyncImpl() {
         return "pid = 55";
       },
@@ -180,19 +180,19 @@ macOnlyTest("getMacOSBridgeServiceStatus reports launchd + runtime metadata toge
 });
 
 function withTempDaemonEnv(run) {
-  const previousDir = process.env.REMODEX_DEVICE_STATE_DIR;
+  const previousDir = process.env.PORTDEX_DEVICE_STATE_DIR;
   const previousHome = process.env.HOME;
-  const rootDir = fs.mkdtempSync(path.join(os.tmpdir(), "remodex-launch-agent-"));
-  process.env.REMODEX_DEVICE_STATE_DIR = rootDir;
+  const rootDir = fs.mkdtempSync(path.join(os.tmpdir(), "portdex-launch-agent-"));
+  process.env.PORTDEX_DEVICE_STATE_DIR = rootDir;
   process.env.HOME = rootDir;
 
   try {
     return run({ rootDir });
   } finally {
     if (previousDir === undefined) {
-      delete process.env.REMODEX_DEVICE_STATE_DIR;
+      delete process.env.PORTDEX_DEVICE_STATE_DIR;
     } else {
-      process.env.REMODEX_DEVICE_STATE_DIR = previousDir;
+      process.env.PORTDEX_DEVICE_STATE_DIR = previousDir;
     }
     if (previousHome === undefined) {
       delete process.env.HOME;

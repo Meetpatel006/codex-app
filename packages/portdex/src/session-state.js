@@ -1,5 +1,5 @@
 // FILE: session-state.js
-// Purpose: Persists the latest active Remodex thread for local status and resume metadata.
+// Purpose: Persists the latest active thread for local status and resume metadata.
 // Layer: CLI helper
 // Exports: rememberActiveThread, openLastActiveThread, readLastActiveThread
 // Depends on: fs, os, path
@@ -42,7 +42,7 @@ function openLastActiveThread() {
   const state = readState();
   const threadId = state?.threadId;
   if (!threadId) {
-    throw new Error("No remembered Remodex thread found yet.");
+    throw new Error("No remembered thread found yet.");
   }
 
   return state;

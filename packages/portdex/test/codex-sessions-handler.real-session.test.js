@@ -8,7 +8,7 @@ const { handleCodexSessionsRequest } = require("../src/codex-sessions-handler");
 
 test("codex/sessions handlers can read real local Codex session data", async (t) => {
   const requestedHome =
-    process.env.REMODEX_REAL_CODEX_HOME ||
+    process.env.PORTDEX_REAL_CODEX_HOME ||
     process.env.CODEX_HOME ||
     path.join(os.homedir(), ".codex");
 

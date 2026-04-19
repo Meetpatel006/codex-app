@@ -6,15 +6,15 @@ const path = require("path");
 const rootDir = path.resolve(__dirname, "..");
 const useNgrok = process.argv.includes("--ngrok");
 const relayPort = Number(
-  process.env.PORT || process.env.REMODEX_RELAY_PORT || 9000,
+  process.env.PORT || process.env.PORTDEX_RELAY_PORT || 9000,
 );
-const ngrokApiPort = Number(process.env.REMODEX_NGROK_API_PORT || 4040);
+const ngrokApiPort = Number(process.env.PORTDEX_NGROK_API_PORT || 4040);
 
 let sharedEnv = {
   ...process.env,
   PORT: String(relayPort),
-  REMODEX_RELAY:
-    process.env.REMODEX_RELAY || `ws://127.0.0.1:${relayPort}/relay`,
+  PORTDEX_RELAY:
+    process.env.PORTDEX_RELAY || `ws://127.0.0.1:${relayPort}/relay`,
 };
 
 let relay = null;
@@ -40,11 +40,11 @@ async function main() {
       const relayUrl = `${publicUrl.replace(/^https:\/\//, "wss://")}/relay`;
       sharedEnv = {
         ...sharedEnv,
-        REMODEX_RELAY: relayUrl,
+        PORTDEX_RELAY: relayUrl,
       };
-      console.log(`[stack] REMODEX_RELAY=${relayUrl}`);
+      console.log(`[stack] PORTDEX_RELAY=${relayUrl}`);
     } else {
-      console.log(`[stack] REMODEX_RELAY=${sharedEnv.REMODEX_RELAY}`);
+      console.log(`[stack] PORTDEX_RELAY=${sharedEnv.PORTDEX_RELAY}`);
     }
 
     relay = spawnWorkspaceScript("packages/relay", "start");
@@ -74,7 +74,7 @@ function stopExistingBridgeProcesses() {
 
   const psCommand = [
     "$processes = Get-CimInstance Win32_Process -Filter \"Name = 'node.exe'\" -ErrorAction SilentlyContinue;",
-    "$targets = $processes | Where-Object { $_.CommandLine -match 'remodex\\.js\\s+up' };",
+    "$targets = $processes | Where-Object { $_.CommandLine -match 'portdex\\.js\\s+up' };",
     "foreach ($target in $targets) { Stop-Process -Id $target.ProcessId -Force -ErrorAction SilentlyContinue }",
   ].join(" ");
 

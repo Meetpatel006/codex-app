@@ -3,7 +3,7 @@ import { ed25519 } from "@noble/curves/ed25519.js";
 
 import { base64ToBytes, bytesToBase64, bytesToHex, hexToBytes } from "./crypto";
 
-const TRUSTED_SESSION_RESOLVE_TAG = "remodex-trusted-session-resolve-v1";
+const TRUSTED_SESSION_RESOLVE_TAG = "portdex-trusted-session-resolve-v1";
 
 type TrustedResolveRequest = {
   relayBaseUrl: string;

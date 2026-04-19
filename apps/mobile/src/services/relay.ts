@@ -36,7 +36,7 @@ const SECURE_PROTOCOL_VERSION = 1;
 const HANDSHAKE_MODE_QR_BOOTSTRAP = "qr_bootstrap";
 const SECURE_SENDER_MAC = "mac";
 const SECURE_SENDER_IPHONE = "iphone";
-const HANDSHAKE_TAG = "remodex-e2ee-v1";
+const HANDSHAKE_TAG = "portdex-e2ee-v1";
 
 type AesKeyHandle =
   | { kind: "web"; key: CryptoKey }

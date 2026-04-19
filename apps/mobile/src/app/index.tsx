@@ -1662,7 +1662,7 @@ export default function ChatScreen() {
               experimentalApi: true,
             },
             clientInfo: {
-              name: "remodex-mobile",
+              name: "portdex-mobile",
               version: "1.0.0",
             },
           },

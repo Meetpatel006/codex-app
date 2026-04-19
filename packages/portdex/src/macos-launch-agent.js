@@ -1,5 +1,5 @@
 // FILE: macos-launch-agent.js
-// Purpose: Owns macOS-only launchd install/start/stop/status helpers for the background Remodex bridge.
+// Purpose: Owns macOS-only launchd install/start/stop/status helpers for the background bridge.
 // Layer: CLI helper
 // Exports: start/stop/status helpers plus the launchd service runner used by `portdex up`.
 // Depends on: child_process, fs, os, path, ./bridge, ./daemon-state, ./codex-desktop-refresher, ./qr, ./secure-device-state

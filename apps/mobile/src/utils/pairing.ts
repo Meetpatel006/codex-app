@@ -71,7 +71,7 @@ export async function resolveShortCode(code: string): Promise<string> {
     );
   }
 
-  const defaultRelayUrl = "https://jalisa-unreputed-cleta.ngrok-free.dev";
+  const defaultRelayUrl = "https://portdex.onrender.com";
 
   const response = await fetch(`${defaultRelayUrl}/v1/code/resolve`, {
     method: "POST",

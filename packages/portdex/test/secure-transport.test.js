@@ -184,7 +184,7 @@ test("secure transport round-trips encrypted payloads after a trusted reconnect 
     }),
   });
   const salt = createHash("sha256").update(transcriptBytes).digest();
-  const infoPrefix = `remodex-e2ee-v1|session-2|mac-2|phone-2|${serverHello.keyEpoch}`;
+  const infoPrefix = `portdex-e2ee-v1|session-2|mac-2|phone-2|${serverHello.keyEpoch}`;
   const phoneToMacKey = Buffer.from(
     hkdfSync("sha256", sharedSecret, salt, Buffer.from(`${infoPrefix}|phoneToMac`, "utf8"), 32)
   );
@@ -393,7 +393,7 @@ test("rebinding the relay socket replays bridge output from the last phone ack",
     }),
   });
   const salt = createHash("sha256").update(transcriptBytes).digest();
-  const infoPrefix = `remodex-e2ee-v1|session-5|mac-5|phone-5|${serverHello.keyEpoch}`;
+  const infoPrefix = `portdex-e2ee-v1|session-5|mac-5|phone-5|${serverHello.keyEpoch}`;
   const macToPhoneKey = Buffer.from(
     hkdfSync("sha256", sharedSecret, salt, Buffer.from(`${infoPrefix}|macToPhone`, "utf8"), 32)
   );
@@ -514,7 +514,7 @@ test("resume replay does not advance the replay watermark before a phone ack", (
     }),
   });
   const salt = createHash("sha256").update(transcriptBytes).digest();
-  const infoPrefix = `remodex-e2ee-v1|session-6|mac-6|phone-6|${serverHello.keyEpoch}`;
+  const infoPrefix = `portdex-e2ee-v1|session-6|mac-6|phone-6|${serverHello.keyEpoch}`;
   const macToPhoneKey = Buffer.from(
     hkdfSync("sha256", sharedSecret, salt, Buffer.from(`${infoPrefix}|macToPhone`, "utf8"), 32)
   );
@@ -676,7 +676,7 @@ function buildTranscriptBytes({
   expiresAtForTranscript,
 }) {
   return Buffer.concat([
-    encodeLengthPrefixedUTF8("remodex-e2ee-v1"),
+    encodeLengthPrefixedUTF8("portdex-e2ee-v1"),
     encodeLengthPrefixedUTF8(sessionId),
     encodeLengthPrefixedUTF8(String(protocolVersion)),
     encodeLengthPrefixedUTF8(handshakeMode),
