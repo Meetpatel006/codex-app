@@ -4,7 +4,9 @@
 // Exports: createCodexTransport
 // Depends on: child_process, ws
 
-const { spawn } = require("child_process");
+const { execFileSync, spawn } = require("child_process");
+const fs = require("fs");
+const path = require("path");
 const { URL } = require("url");
 const WebSocket = require("ws");
 
@@ -120,24 +122,40 @@ function createCodexLaunchPlan({ env }) {
     stdio: ["pipe", "pipe", "pipe"],
     env: { ...env },
   };
+  const codexExecutable = resolveCodexExecutable({ env });
+  const codexArgs = ["app-server"];
+  const codexDescription = formatCodexCommandForLog(codexExecutable, codexArgs);
 
   if (process.platform === "win32") {
+    if (requiresCmdShell(codexExecutable)) {
+      const shellCommand = joinWindowsShellCommand(codexExecutable, codexArgs);
+      return {
+        command: env.ComSpec || "cmd.exe",
+        args: ["/d", "/c", shellCommand],
+        options: {
+          ...sharedOptions,
+          windowsHide: true,
+        },
+        description: `\`cmd.exe /d /c ${shellCommand}\``,
+      };
+    }
+
     return {
-      command: env.ComSpec || "cmd.exe",
-      args: ["/d", "/c", "codex app-server"],
+      command: codexExecutable,
+      args: codexArgs,
       options: {
         ...sharedOptions,
         windowsHide: true,
       },
-      description: "`cmd.exe /d /c codex app-server`",
+      description: codexDescription,
     };
   }
 
   return {
-    command: "codex",
-    args: ["app-server"],
+    command: codexExecutable,
+    args: codexArgs,
     options: sharedOptions,
-    description: "`codex app-server`",
+    description: codexDescription,
   };
 }
 
@@ -288,25 +306,135 @@ function createCodexListenLaunchPlan({ endpoint, env }) {
     stdio: ["ignore", "ignore", "pipe"],
     env: { ...env },
   };
+  const codexExecutable = resolveCodexExecutable({ env });
+  const codexArgs = ["app-server", "--listen", endpoint];
+  const codexDescription = formatCodexCommandForLog(codexExecutable, codexArgs);
 
   if (process.platform === "win32") {
+    if (requiresCmdShell(codexExecutable)) {
+      const shellCommand = joinWindowsShellCommand(codexExecutable, codexArgs);
+      return {
+        command: env.ComSpec || "cmd.exe",
+        args: ["/d", "/c", shellCommand],
+        options: {
+          ...sharedOptions,
+          windowsHide: true,
+        },
+        description: `\`cmd.exe /d /c ${shellCommand}\``,
+      };
+    }
+
     return {
-      command: env.ComSpec || "cmd.exe",
-      args: ["/d", "/c", `codex app-server --listen "${endpoint}"`],
+      command: codexExecutable,
+      args: codexArgs,
       options: {
         ...sharedOptions,
         windowsHide: true,
       },
-      description: `\`cmd.exe /d /c codex app-server --listen "${endpoint}"\``,
+      description: codexDescription,
     };
   }
 
   return {
-    command: "codex",
-    args: ["app-server", "--listen", endpoint],
+    command: codexExecutable,
+    args: codexArgs,
     options: sharedOptions,
-    description: `\`codex app-server --listen ${endpoint}\``,
+    description: codexDescription,
   };
+}
+
+function resolveCodexExecutable({
+  env = process.env,
+  fsImpl = fs,
+  execFileSyncImpl = execFileSync,
+} = {}) {
+  const configuredPath = readNonEmptyString(env.PORTDEX_CODEX_CLI_PATH);
+  if (configuredPath) {
+    return configuredPath;
+  }
+
+  if (process.platform !== "win32") {
+    return "codex";
+  }
+
+  const whereResults = runWhereCodex(execFileSyncImpl);
+  if (whereResults.length > 0) {
+    return whereResults[0];
+  }
+
+  const userProfile = readNonEmptyString(env.USERPROFILE);
+  const appData = readNonEmptyString(env.APPDATA);
+  const localAppData = readNonEmptyString(env.LOCALAPPDATA);
+  const programFiles = readNonEmptyString(env.ProgramFiles);
+  const candidates = [
+    userProfile ? path.join(userProfile, ".bun", "bin", "codex.exe") : "",
+    appData ? path.join(appData, "npm", "codex.cmd") : "",
+    appData ? path.join(appData, "npm", "codex") : "",
+    localAppData ? path.join(localAppData, "Programs", "nodejs", "codex.cmd") : "",
+    programFiles ? path.join(programFiles, "nodejs", "codex.cmd") : "",
+  ].filter(Boolean);
+
+  for (const candidate of candidates) {
+    if (fsImpl.existsSync(candidate)) {
+      return candidate;
+    }
+  }
+
+  return "codex";
+}
+
+function formatCodexCommandForLog(command, args) {
+  const normalizedArgs = args.map((arg) => quoteIfNeeded(arg)).join(" ");
+  return `\`${quoteIfNeeded(command)}${normalizedArgs ? ` ${normalizedArgs}` : ""}\``;
+}
+
+function requiresCmdShell(command) {
+  if (process.platform !== "win32") {
+    return false;
+  }
+
+  const ext = path.extname(command || "").toLowerCase();
+  return ext === ".cmd" || ext === ".bat";
+}
+
+function joinWindowsShellCommand(command, args) {
+  const parts = [command, ...args].map((value) => quoteIfNeeded(value));
+  return parts.join(" ");
+}
+
+function stripWrappingQuotes(value) {
+  const trimmed = String(value).trim();
+  if (
+    (trimmed.startsWith("\"") && trimmed.endsWith("\""))
+    || (trimmed.startsWith("'") && trimmed.endsWith("'"))
+  ) {
+    return trimmed.slice(1, -1);
+  }
+  return trimmed;
+}
+
+function quoteIfNeeded(value) {
+  const normalized = stripWrappingQuotes(value);
+  return /\s/.test(normalized) ? `"${normalized}"` : normalized;
+}
+
+function readNonEmptyString(value) {
+  return typeof value === "string" && value.trim() ? value.trim() : "";
+}
+
+function runWhereCodex(execFileSyncImpl) {
+  try {
+    const output = execFileSyncImpl("where.exe", ["codex"], {
+      stdio: ["ignore", "pipe", "pipe"],
+      encoding: "utf8",
+    });
+    return String(output)
+      .split(/\r?\n/)
+      .map((line) => line.trim())
+      .filter(Boolean);
+  } catch {
+    return [];
+  }
 }
 
 function isDefaultLocalCodexEndpoint(endpoint) {
@@ -339,4 +467,13 @@ function createListenerBag() {
   };
 }
 
-module.exports = { createCodexTransport };
+module.exports = {
+  createCodexTransport,
+  __test: {
+    createCodexLaunchPlan,
+    createCodexListenLaunchPlan,
+    resolveCodexExecutable,
+    requiresCmdShell,
+    quoteIfNeeded,
+  },
+};

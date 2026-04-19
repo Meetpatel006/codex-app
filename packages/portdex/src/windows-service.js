@@ -46,6 +46,8 @@ async function startWindowsBridgeService({
   assertRelayConfigured(config);
   const startedAt = Date.now();
   const stateDir = resolvePortdexStateDir({ env, osImpl });
+  const codexCliPath = resolveCodexCliPath({ env, fsImpl, execFileSyncImpl });
+  const codexHomePath = resolveCodexHomePath({ env, fsImpl });
 
   writeDaemonConfig(config, { env, fsImpl });
   clearPairingSession({ env, fsImpl });
@@ -59,6 +61,8 @@ async function startWindowsBridgeService({
     nodePath,
     cliPath,
     stateDir,
+    codexCliPath,
+    codexHomePath,
     ServiceCtor,
   });
   const serviceStatus = readWindowsServiceStatus(execFileSyncImpl);
@@ -66,11 +70,13 @@ async function startWindowsBridgeService({
     const service = createWindowsService({
       ServiceCtor,
       serviceName: SERVICE_NAME,
-      execPath: nodePath,
-      cliPath,
-      stateDir,
-    });
-    await startService(service);
+        execPath: nodePath,
+        cliPath,
+        stateDir,
+        codexCliPath,
+        codexHomePath,
+      });
+      await startService(service);
   }
 
   if (!waitForPairing) {
@@ -106,6 +112,8 @@ async function stopWindowsBridgeService({
   assertWindowsPlatform(platform);
   const queryResult = readWindowsServiceStatus(execFileSyncImpl);
   const stateDir = resolvePortdexStateDir({ env, osImpl });
+  const codexCliPath = resolveCodexCliPath({ env, fsImpl, execFileSyncImpl });
+  const codexHomePath = resolveCodexHomePath({ env, fsImpl });
   try {
     if (queryResult.installed && queryResult.running) {
       const service = createWindowsService({
@@ -114,6 +122,8 @@ async function stopWindowsBridgeService({
         execPath: nodePath,
         cliPath,
         stateDir,
+        codexCliPath,
+        codexHomePath,
       });
       await stopService(service);
     }
@@ -169,6 +179,8 @@ async function ensureWindowsService({
   nodePath,
   cliPath,
   stateDir,
+  codexCliPath,
+  codexHomePath,
   ServiceCtor,
 }) {
   stopWindowsServiceAlias(execFileSyncImpl, SERVICE_NAME);
@@ -183,6 +195,8 @@ async function ensureWindowsService({
     execPath: nodePath,
     cliPath,
     stateDir,
+    codexCliPath,
+    codexHomePath,
   });
   await installService(service);
 }
@@ -248,8 +262,21 @@ function createWindowsService({
   execPath,
   cliPath,
   stateDir = "",
+  codexCliPath = "",
+  codexHomePath = "",
 }) {
   const NodeWindowsService = resolveServiceCtor(ServiceCtor);
+  const serviceEnv = [];
+  if (stateDir) {
+    serviceEnv.push({ name: "PORTDEX_DEVICE_STATE_DIR", value: stateDir });
+  }
+  if (codexCliPath) {
+    serviceEnv.push({ name: "PORTDEX_CODEX_CLI_PATH", value: codexCliPath });
+  }
+  if (codexHomePath) {
+    serviceEnv.push({ name: "CODEX_HOME", value: codexHomePath });
+  }
+
   return new NodeWindowsService({
     name: serviceName,
     description: "Portdex Bridge Service",
@@ -257,10 +284,76 @@ function createWindowsService({
     scriptOptions: "run-service",
     execPath,
     workingDirectory: path.resolve(path.dirname(cliPath), ".."),
-    env: stateDir
-      ? [{ name: "PORTDEX_DEVICE_STATE_DIR", value: stateDir }]
-      : undefined,
+    env: serviceEnv.length > 0 ? serviceEnv : undefined,
   });
+}
+
+function resolveCodexCliPath({
+  env = process.env,
+  fsImpl = fs,
+  execFileSyncImpl = execFileSync,
+} = {}) {
+  const whereResults = runWhereCodex(execFileSyncImpl);
+  if (whereResults.length > 0) {
+    return whereResults[0];
+  }
+
+  const userProfile = readNonEmptyString(env.USERPROFILE);
+  const appData = readNonEmptyString(env.APPDATA);
+  const localAppData = readNonEmptyString(env.LOCALAPPDATA);
+  const programFiles = readNonEmptyString(env.ProgramFiles);
+  const candidates = [
+    userProfile ? path.join(userProfile, ".bun", "bin", "codex.exe") : "",
+    appData ? path.join(appData, "npm", "codex.cmd") : "",
+    appData ? path.join(appData, "npm", "codex") : "",
+    localAppData ? path.join(localAppData, "Programs", "nodejs", "codex.cmd") : "",
+    programFiles ? path.join(programFiles, "nodejs", "codex.cmd") : "",
+  ].filter(Boolean);
+
+  for (const candidate of candidates) {
+    if (fsImpl.existsSync(candidate)) {
+      return candidate;
+    }
+  }
+
+  return "";
+}
+
+function resolveCodexHomePath({
+  env = process.env,
+  fsImpl = fs,
+} = {}) {
+  const configuredHome = readNonEmptyString(env.CODEX_HOME);
+  if (configuredHome) {
+    return configuredHome;
+  }
+
+  const userProfile = readNonEmptyString(env.USERPROFILE);
+  if (!userProfile) {
+    return "";
+  }
+
+  const candidate = path.join(userProfile, ".codex");
+  return fsImpl.existsSync(candidate) ? candidate : "";
+}
+
+function runWhereCodex(execFileSyncImpl) {
+  try {
+    const output = execFileSyncImpl("where.exe", ["codex"], {
+      stdio: ["ignore", "pipe", "pipe"],
+      encoding: "utf8",
+    });
+    return String(output)
+      .split(/\r?\n/)
+      .map((line) => line.trim())
+      .filter(Boolean);
+  } catch {
+    return [];
+  }
+}
+
+function readNonEmptyString(value) {
+  return typeof value === "string" && value.trim() ? value.trim() : "";
 }
 
 function resolveServiceCtor(ServiceCtor) {
