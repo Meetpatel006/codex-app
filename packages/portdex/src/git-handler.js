@@ -1291,7 +1291,16 @@ async function gitDiffNoIndexNumstat(cwd, filePath) {
   try {
     const { stdout } = await execFileAsync(
       "git",
-      ["diff", "--no-index", "--numstat", "--", "/dev/null", filePath],
+      [
+        "-c",
+        `safe.directory=${cwd}`,
+        "diff",
+        "--no-index",
+        "--numstat",
+        "--",
+        "/dev/null",
+        filePath,
+      ],
       { cwd, timeout: GIT_TIMEOUT_MS, maxBuffer: GIT_MAX_BUFFER_BYTES },
     );
     return stdout;
@@ -1319,7 +1328,16 @@ async function gitDiffNoIndexPatch(cwd, filePath) {
   try {
     const { stdout } = await execFileAsync(
       "git",
-      ["diff", "--no-index", "--binary", "--", "/dev/null", filePath],
+      [
+        "-c",
+        `safe.directory=${cwd}`,
+        "diff",
+        "--no-index",
+        "--binary",
+        "--",
+        "/dev/null",
+        filePath,
+      ],
       { cwd, timeout: GIT_TIMEOUT_MS, maxBuffer: GIT_MAX_BUFFER_BYTES },
     );
     return stdout;
@@ -1335,7 +1353,7 @@ async function gitDiffNoIndexPatch(cwd, filePath) {
 // ─── Helpers ──────────────────────────────────────────────────
 
 function git(cwd, ...args) {
-  return execFileAsync("git", args, {
+  return execFileAsync("git", ["-c", `safe.directory=${cwd}`, ...args], {
     cwd,
     timeout: GIT_TIMEOUT_MS,
     maxBuffer: GIT_MAX_BUFFER_BYTES,
