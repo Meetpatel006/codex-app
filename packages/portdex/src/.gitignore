@@ -28,7 +28,7 @@ coverage
 out/
 build
 dist
-daemon/
+bin/daemon/
 
 # Debug
 npm-debug.log*

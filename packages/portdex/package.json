@@ -1,0 +1,50 @@
+{
+  "name": "portdex",
+  "version": "1.0.0",
+  "description": "Local bridge between Codex and the Portdex mobile app. Run `portdex up` to start.",
+  "main": "dist/index.cjs",
+  "bin": {
+    "portdex": "./dist/cli.mjs"
+  },
+  "files": [
+    "dist/"
+  ],
+  "scripts": {
+    "build": "node ./scripts/build.mjs",
+    "start": "node ./dist/cli.mjs up",
+    "up": "node ./dist/cli.mjs up",
+    "run": "node ./dist/cli.mjs run",
+    "stop": "node ./dist/cli.mjs stop",
+    "status": "node ./dist/cli.mjs status",
+    "test": "node --test ./test/*.test.js",
+    "prepack": "node ./scripts/prepare-private-defaults.js && npm run build",
+    "postpack": "node ./scripts/cleanup-private-defaults.js"
+  },
+  "keywords": [
+    "portdex",
+    "codex",
+    "bridge",
+    "cli",
+    "mobile"
+  ],
+  "author": "Portdex Team",
+  "license": "ISC",
+  "type": "commonjs",
+  "dependencies": {
+    "dotenv": "^17.4.2",
+    "node-windows": "^1.0.0-beta.8",
+    "qrcode-terminal": "^0.12.0",
+    "ws": "^8.19.0"
+  },
+  "devDependencies": {
+    "esbuild": "^0.25.11"
+  },
+  "engines": {
+    "node": ">=18"
+  },
+  "homepage": "https://github.com/portdex/portdex#readme",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/portdex/portdex.git"
+  }
+}
