@@ -173,6 +173,11 @@ type RelayMessageParams = {
   grantRoot?: string | null;
   grant_root?: string | null;
   reason?: string | null;
+  activeSessionId?: string;
+  sessionTitle?: string;
+  trigger?: string;
+  source?: string;
+  updatedAtMs?: number;
   changes?: Record<string, unknown>;
   item?: {
     id?: string;
@@ -235,7 +240,7 @@ const loggedUntitledFallbackSessions = new Set<string>();
 
 const PAIRING_CONNECT_TIMEOUT_MS = 15_000;
 const PAIRING_FAILURE_REDIRECT_MS = 2_500;
-const ACTIVE_SESSION_SYNC_POLL_MS = 2_500;
+const ACTIVE_SESSION_FALLBACK_SYNC_POLL_MS = 45_000;
 const MANUAL_SESSION_SELECTION_GUARD_MS = 8_000;
 const DUPLICATE_MESSAGE_WINDOW_MS = 350;
 const CHAT_THREAD_SCOPED_METHODS = new Set([
@@ -263,7 +268,6 @@ const CHAT_THREAD_SCOPED_METHODS = new Set([
 let bootstrappedReadySessionId: string | null = null;
 let lastInboundMessageSignature = "";
 let lastInboundMessageAtMs = 0;
-let lastActiveSessionPollAtMs = 0;
 
 function normalizeEventToken(value: unknown) {
   return typeof value === "string"
@@ -2141,6 +2145,54 @@ export default function ChatScreen() {
     [refreshCodexSessions],
   );
 
+  const syncActiveSessionFromBridge = useCallback(
+    async (reason: string) => {
+      if (!relayService.isSecureReady()) {
+        return;
+      }
+
+      const result = await relayService.requestJson<CodexActiveSessionResult>(
+        "codex/sessions/active",
+        {
+          limit: 150,
+        },
+        10_000,
+      );
+      const syncedThreadId = normalizeThreadReference(
+        result?.activeSessionId ||
+          result?.session?.sessionId ||
+          result?.session?.threadId,
+      );
+      if (!syncedThreadId) {
+        return;
+      }
+
+      const manualSelectionGuard = manualSessionSelectionGuardRef.current;
+      if (manualSelectionGuard) {
+        if (manualSelectionGuard.expiresAt <= Date.now()) {
+          manualSessionSelectionGuardRef.current = null;
+        } else if (manualSelectionGuard.threadId === syncedThreadId) {
+          manualSessionSelectionGuardRef.current = null;
+        } else {
+          const currentActiveThreadId = normalizeThreadReference(
+            useSessionStore.getState().activeSessionId,
+          );
+          if (currentActiveThreadId === manualSelectionGuard.threadId) {
+            return;
+          }
+          manualSessionSelectionGuardRef.current = null;
+        }
+      }
+
+      syncToActiveThread(syncedThreadId, {
+        reason:
+          result?.source === "remembered" ? "bridge_active_remembered" : reason,
+        sessionTitle: result?.session?.title || null,
+      });
+    },
+    [syncToActiveThread],
+  );
+
   const resumeThread = useCallback(
     async (threadId: string | null | undefined) => {
       const normalizedThreadId = normalizeThreadReference(threadId);
@@ -2575,6 +2627,22 @@ export default function ChatScreen() {
         return;
       }
       console.log("[mobile][message]", message.method, message.params);
+
+      if (message.method === "codex/sessions/updated") {
+        const hintedThreadId = normalizeThreadReference(
+          params?.activeSessionId || params?.threadId,
+        );
+        const hintedSessionTitle = sanitizeSessionTitle(params?.sessionTitle || "");
+        void refreshCodexSessions({
+          preserveActiveSessionId: hintedThreadId,
+          preserveActiveSessionTitle: hintedSessionTitle,
+        }).catch((error) => {
+          console.warn("[mobile][codex/sessions/list] push refresh failed", error);
+        });
+        void syncActiveSessionFromBridge("bridge_active_push").catch((error) => {
+          console.warn("[mobile][codex/sessions/active] push sync failed", error);
+        });
+      }
 
       const eventPayload = params?.msg || params;
       const messageThreadId = extractMessageThreadId(params);
@@ -3278,6 +3346,7 @@ export default function ChatScreen() {
     setDiffSnapshot,
     resumeThread,
     syncToActiveThread,
+    syncActiveSessionFromBridge,
   ]);
 
   useEffect(() => {
@@ -3316,78 +3385,25 @@ export default function ChatScreen() {
     }
 
     let isCancelled = false;
-    let inFlight = false;
-
-    const pollActiveSession = async () => {
-      if (isCancelled || inFlight || !relayService.isSecureReady()) {
+    const pollActiveSessionFallback = () => {
+      if (isCancelled || !relayService.isSecureReady()) {
         return;
       }
-
-      const now = Date.now();
-      if (now - lastActiveSessionPollAtMs < ACTIVE_SESSION_SYNC_POLL_MS - 200) {
-        return;
-      }
-      lastActiveSessionPollAtMs = now;
-
-      inFlight = true;
-      try {
-        const result = await relayService.requestJson<CodexActiveSessionResult>(
-          "codex/sessions/active",
-          {
-            limit: 150,
-          },
-          10_000,
-        );
-        const syncedThreadId = normalizeThreadReference(
-          result?.activeSessionId ||
-            result?.session?.sessionId ||
-            result?.session?.threadId,
-        );
-        if (!syncedThreadId) {
-          return;
-        }
-
-        const manualSelectionGuard = manualSessionSelectionGuardRef.current;
-        if (manualSelectionGuard) {
-          if (manualSelectionGuard.expiresAt <= Date.now()) {
-            manualSessionSelectionGuardRef.current = null;
-          } else if (manualSelectionGuard.threadId === syncedThreadId) {
-            manualSessionSelectionGuardRef.current = null;
-          } else {
-            const currentActiveThreadId = normalizeThreadReference(
-              useSessionStore.getState().activeSessionId,
-            );
-            if (currentActiveThreadId === manualSelectionGuard.threadId) {
-              return;
-            }
-            manualSessionSelectionGuardRef.current = null;
-          }
-        }
-
-        syncToActiveThread(syncedThreadId, {
-          reason:
-            result?.source === "remembered"
-              ? "bridge_active_remembered"
-              : "bridge_active_recent",
-          sessionTitle: result?.session?.title || null,
-        });
-      } catch (error) {
-        console.warn("[mobile][codex/sessions/active] poll failed", error);
-      } finally {
-        inFlight = false;
-      }
+      void syncActiveSessionFromBridge("bridge_active_fallback").catch((error) => {
+        console.warn("[mobile][codex/sessions/active] fallback sync failed", error);
+      });
     };
 
-    void pollActiveSession();
+    void pollActiveSessionFallback();
     const timer = setInterval(() => {
-      void pollActiveSession();
-    }, ACTIVE_SESSION_SYNC_POLL_MS);
+      pollActiveSessionFallback();
+    }, ACTIVE_SESSION_FALLBACK_SYNC_POLL_MS);
 
     return () => {
       isCancelled = true;
       clearInterval(timer);
     };
-  }, [pairing, pairingFlow.status, syncToActiveThread]);
+  }, [pairing, pairingFlow.status, syncActiveSessionFromBridge]);
 
   useEffect(() => {
     async function connect() {

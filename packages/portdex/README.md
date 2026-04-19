@@ -67,7 +67,7 @@ PORTDEX_TYPE=
 PORTDEX_DEVICE_STATE_DIR=
 ```
 
-If `PORTDEX_CODEX_ENDPOINT` is set to `ws://127.0.0.1:4501` (or `ws://localhost:4501`), Portdex now auto-launches `codex app-server --listen ...` for you.
+If `PORTDEX_CODEX_ENDPOINT` is set to `ws://127.0.0.1:4501` (or `ws://localhost:4501`), Portdex now auto-launches `codex app-server --listen ...` for you and auto-discovers the Codex CLI path on Windows.
 
 ## Runtime files
 

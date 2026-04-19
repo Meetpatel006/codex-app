@@ -39,6 +39,14 @@ const {
   validateRuntimeOptions,
   normalizeRuntimeOptions,
 } = require("./runtime-options");
+const SESSION_UPDATE_TRIGGER_METHODS = new Set([
+  "thread/started",
+  "thread/resume",
+  "thread/read",
+  "turn/started",
+  "turn/completed",
+]);
+const SESSION_UPDATE_NOTIFICATION_DEBOUNCE_MS = 350;
 
 function startBridge({
   config: explicitConfig = null,
@@ -155,6 +163,8 @@ function startBridge({
   const alwaysForwardInitialize = Boolean(effectiveCodexEndpoint);
   let contextUsageWatcher = null;
   let watchedContextUsageKey = null;
+  let pendingSessionUpdateNotification = null;
+  let sessionUpdateNotificationTimer = null;
 
   const codex = createCodexTransport({
     endpoint: effectiveCodexEndpoint,
@@ -296,6 +306,7 @@ function startBridge({
         socket = null;
       }
       stopContextUsageWatcher();
+      stopPendingSessionUpdateNotifications();
       rolloutLiveMirror?.stopAll();
       desktopRefresher.handleTransportReset();
       scheduleRelayReconnect(code);
@@ -337,6 +348,7 @@ function startBridge({
     isShuttingDown = true;
     clearReconnectTimer();
     stopContextUsageWatcher();
+    stopPendingSessionUpdateNotifications();
     rolloutLiveMirror?.stopAll();
     desktopRefresher.handleTransportReset();
     if (socket?.readyState === WebSocket.OPEN || socket?.readyState === WebSocket.CONNECTING) {
@@ -427,9 +439,66 @@ function startBridge({
     }
 
     rememberActiveThread(context.threadId, source);
+    queueSessionUpdateNotification(source, context);
     if (shouldStartContextUsageWatcher(context)) {
       ensureContextUsageWatcher(context);
     }
+  }
+
+  function queueSessionUpdateNotification(source, context) {
+    const method = readString(context?.method);
+    const threadId = readString(context?.threadId);
+    if (source !== "codex" || !threadId || !method) {
+      return;
+    }
+    if (!SESSION_UPDATE_TRIGGER_METHODS.has(method)) {
+      return;
+    }
+
+    pendingSessionUpdateNotification = {
+      source,
+      method,
+      threadId,
+    };
+
+    if (sessionUpdateNotificationTimer) {
+      return;
+    }
+
+    sessionUpdateNotificationTimer = setTimeout(() => {
+      sessionUpdateNotificationTimer = null;
+      flushSessionUpdateNotification();
+    }, SESSION_UPDATE_NOTIFICATION_DEBOUNCE_MS);
+  }
+
+  function flushSessionUpdateNotification() {
+    const pending = pendingSessionUpdateNotification;
+    pendingSessionUpdateNotification = null;
+    if (!pending?.threadId) {
+      return;
+    }
+
+    sendApplicationResponse(
+      JSON.stringify({
+        method: "codex/sessions/updated",
+        params: {
+          trigger: pending.method,
+          source: pending.source,
+          threadId: pending.threadId,
+          activeSessionId: pending.threadId,
+          updatedAtMs: Date.now(),
+        },
+      }),
+    );
+  }
+
+  function stopPendingSessionUpdateNotifications() {
+    pendingSessionUpdateNotification = null;
+    if (!sessionUpdateNotificationTimer) {
+      return;
+    }
+    clearTimeout(sessionUpdateNotificationTimer);
+    sessionUpdateNotificationTimer = null;
   }
 
   // Mirrors CodexMonitor's persisted token_count fallback so the phone keeps
