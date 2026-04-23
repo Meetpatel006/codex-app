@@ -53,6 +53,7 @@ import {
   type RuntimeOptions,
   type ModelOption,
 } from "@/store/runtime-options";
+import { useOnboardingRedirect } from "@/hooks/useOnboardingRedirect";
 import { useTheme } from "@/hooks/use-theme";
 
 type CollaborationModePayload = {
@@ -1447,6 +1448,7 @@ function buildSidebarUsageItems(params: {
 }
 
 export default function ChatScreen() {
+  const { isReady } = useOnboardingRedirect();
   const theme = useTheme();
   const styles = useMemo(() => createStyles(theme), [theme]);
   const [assistantMessageId, setAssistantMessageId] = useState<string | null>(

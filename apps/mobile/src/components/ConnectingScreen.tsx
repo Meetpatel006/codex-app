@@ -80,7 +80,6 @@ export function ConnectingScreen() {
     <Animated.View style={[styles.page, pageAnimStyle]}>
       <Animated.View style={[styles.content, contentAnimStyle]}>
         <View style={styles.spinnerWrap}>
-          <View style={styles.glowRing} />
           <Animated.View style={spinnerAnimStyle}>
             <Svg width={SPINNER_SIZE} height={SPINNER_SIZE} viewBox="0 0 48 48">
               <Circle

@@ -98,6 +98,13 @@ export default Sentry.wrap(function RootLayout() {
           <TelemetryRouteTracker />
           <AnimatedSplashOverlay />
           <Stack screenOptions={{ headerShown: false }}>
+            <Stack.Screen
+              name="onboarding"
+              options={{
+                presentation: "modal",
+                animation: "slide_from_bottom",
+              }}
+            />
             <Stack.Screen name="index" />
             <Stack.Screen name="pairing-scan" />
           </Stack>
