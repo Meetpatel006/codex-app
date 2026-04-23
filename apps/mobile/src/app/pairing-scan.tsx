@@ -1,5 +1,14 @@
-import React, { useCallback, useMemo, useState } from "react";
-import { Alert, Pressable, StyleSheet, Text, View } from "react-native";
+import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import {
+  ActivityIndicator,
+  Alert,
+  Keyboard,
+  Pressable,
+  StyleSheet,
+  Text,
+  TextInput,
+  View,
+} from "react-native";
 import { CameraView, useCameraPermissions } from "expo-camera";
 import { useRouter } from "expo-router";
 
@@ -7,7 +16,19 @@ import { FontFamilies } from "@/constants/fonts";
 import { trackTelemetryEvent } from "@/services/telemetry";
 import { useSessionStore } from "@/store/session";
 import { useTheme } from "@/hooks/use-theme";
-import { parsePairingPayload } from "@/utils/pairing";
+import {
+  isShortCode,
+  parsePairingPayload,
+  resolveShortCode,
+} from "@/utils/pairing";
+
+function navigateBackToPairing(router: ReturnType<typeof useRouter>) {
+  if (router.canGoBack()) {
+    router.back();
+    return;
+  }
+  router.replace("/");
+}
 
 export default function PairingScanScreen() {
   const theme = useTheme();
@@ -18,8 +39,109 @@ export default function PairingScanScreen() {
   const [permission, requestPermission] = useCameraPermissions();
   const [scannerLocked, setScannerLocked] = useState(false);
   const [isProcessing, setIsProcessing] = useState(false);
+  const [manualCode, setManualCode] = useState("");
+  const [isCodeInputFocused, setIsCodeInputFocused] = useState(false);
+  const [showCursor, setShowCursor] = useState(true);
+  const codeInputRef = useRef<TextInput>(null);
+  const [isManualProcessing, setIsManualProcessing] = useState(false);
 
   const styles = useMemo(() => createStyles(theme), [theme]);
+
+  useEffect(() => {
+    if (isCodeInputFocused) {
+      const interval = setInterval(() => {
+        setShowCursor((prev) => !prev);
+      }, 500);
+      return () => {
+        clearInterval(interval);
+        setShowCursor(true);
+      };
+    } else {
+      setShowCursor(true);
+    }
+  }, [isCodeInputFocused]);
+
+  const handleManualSubmit = async () => {
+    if (!manualCode.trim() || isManualProcessing) return;
+
+    Keyboard.dismiss();
+    setIsManualProcessing(true);
+    const usedShortCode = isShortCode(manualCode.trim());
+
+    try {
+      const trimmedCode = manualCode.trim();
+      const payload = isShortCode(trimmedCode)
+        ? await resolveShortCode(trimmedCode)
+        : trimmedCode;
+
+      const parsed = parsePairingPayload(payload);
+      await startPairing(parsed);
+      trackTelemetryEvent("pairing_manual_code_submitted", {
+        used_short_code: usedShortCode,
+        success: true,
+      });
+      router.replace("/");
+    } catch (error) {
+      const message =
+        error instanceof Error ? error.message : "Failed to connect";
+      const isExpired = message.toLowerCase().includes("expired");
+
+      if (isExpired) {
+        markPairingFailed(message, { expired: true });
+        router.replace("/");
+        return;
+      }
+
+      Alert.alert("Connection failed", message);
+
+      trackTelemetryEvent("pairing_manual_code_submitted", {
+        used_short_code: usedShortCode,
+        success: false,
+        expired: isExpired,
+      });
+    } finally {
+      setIsManualProcessing(false);
+    }
+  };
+
+  const handleManualCodeChange = (value: string) => {
+    const normalized = value
+      .toUpperCase()
+      .replace(/[^A-Z0-9]/g, "")
+      .slice(0, 8);
+    setManualCode(normalized);
+  };
+
+  const codeChars = Array.from(
+    { length: 8 },
+    (_, index) => manualCode[index] || "",
+  );
+
+  const getLeftCodeDisplay = () => {
+    const chars = codeChars.slice(0, 4).map((char) => (char ? char : "_"));
+    const cursorPos = Math.min(manualCode.length, 4);
+    if (isCodeInputFocused && showCursor && cursorPos >= 0 && cursorPos < 4) {
+      chars[cursorPos] = "|";
+    }
+    return chars.join(" ");
+  };
+
+  const getRightCodeDisplay = () => {
+    const chars = codeChars.slice(4).map((char) => (char ? char : "_"));
+    const cursorPos = Math.max(0, manualCode.length - 4);
+    if (
+      isCodeInputFocused &&
+      showCursor &&
+      manualCode.length >= 4 &&
+      cursorPos < 4
+    ) {
+      chars[cursorPos] = "|";
+    }
+    return chars.join(" ");
+  };
+
+  const leftCode = getLeftCodeDisplay();
+  const rightCode = getRightCodeDisplay();
 
   const onScanned = useCallback(
     async (data: string) => {
@@ -90,7 +212,7 @@ export default function PairingScanScreen() {
                 reason: "permission_denied",
               });
               void resetPairingFlow();
-              router.back();
+              navigateBackToPairing(router);
             }}
           >
             <Text style={styles.backButtonText}>Go Back</Text>
@@ -100,7 +222,7 @@ export default function PairingScanScreen() {
     );
   }
 
-  return (
+return (
     <View style={styles.container}>
       <CameraView
         style={styles.camera}
@@ -119,12 +241,66 @@ export default function PairingScanScreen() {
                 reason: "cancel",
               });
               void resetPairingFlow();
-              router.back();
+              navigateBackToPairing(router);
             }}
           >
             <Text style={styles.closeButtonText}>Cancel</Text>
           </Pressable>
         </View>
+      </View>
+
+      <View style={styles.bottomContainer}>
+        <Text style={styles.bottomTitle}>Having trouble scanning?</Text>
+        <Text style={styles.bottomSubtitle}>
+          Enter the 8-character code from your Codex desktop app
+        </Text>
+
+        <View style={styles.codeRow}>
+          <Pressable
+            style={styles.codePill}
+            onPress={() => codeInputRef.current?.focus()}
+          >
+            <Text style={styles.codeText}>{leftCode}</Text>
+          </Pressable>
+          <Text style={styles.codeDivider}>-</Text>
+          <Pressable
+            style={styles.codePill}
+            onPress={() => codeInputRef.current?.focus()}
+          >
+            <Text style={styles.codeText}>{rightCode}</Text>
+          </Pressable>
+        </View>
+
+        <TextInput
+          ref={codeInputRef}
+          style={styles.hiddenInput}
+          keyboardType="default"
+          value={manualCode}
+          onChangeText={handleManualCodeChange}
+          editable={!isManualProcessing}
+          autoCapitalize="characters"
+          autoCorrect={false}
+          returnKeyType="done"
+          maxLength={8}
+          onFocus={() => setIsCodeInputFocused(true)}
+          onBlur={() => setIsCodeInputFocused(false)}
+          onSubmitEditing={handleManualSubmit}
+        />
+
+        <Pressable
+          style={[
+            styles.connectButton,
+            (!manualCode.trim() || isManualProcessing) && styles.connectButtonDisabled,
+          ]}
+          onPress={handleManualSubmit}
+          disabled={!manualCode.trim() || isManualProcessing}
+        >
+          {isManualProcessing ? (
+            <ActivityIndicator color="#ffffff" size="small" />
+          ) : (
+            <Text style={styles.connectButtonText}>Connect</Text>
+          )}
+        </Pressable>
       </View>
     </View>
   );
@@ -157,6 +333,88 @@ const createStyles = (theme: ReturnType<typeof useTheme>) =>
     closeButtonText: {
       color: "#fff",
       fontSize: 15,
+      fontWeight: "600",
+      fontFamily: FontFamilies.normal.ibmPlexSans,
+    },
+    bottomContainer: {
+      position: "absolute",
+      bottom: 0,
+      left: 0,
+      right: 0,
+      backgroundColor: "rgba(0,0,0,0.85)",
+      borderTopLeftRadius: 24,
+      borderTopRightRadius: 24,
+      paddingHorizontal: 20,
+      paddingTop: 24,
+      paddingBottom: 40,
+      alignItems: "center",
+    },
+    bottomTitle: {
+      color: "#fff",
+      fontSize: 18,
+      fontWeight: "700",
+      fontFamily: FontFamilies.display.spaceGrotesk,
+      marginBottom: 4,
+    },
+    bottomSubtitle: {
+      color: "rgba(255,255,255,0.6)",
+      fontSize: 14,
+      fontFamily: FontFamilies.normal.ibmPlexSans,
+      marginBottom: 20,
+    },
+    codeRow: {
+      flexDirection: "row",
+      alignItems: "center",
+      justifyContent: "center",
+      gap: 8,
+      marginBottom: 20,
+    },
+    codePill: {
+      height: 54,
+      minWidth: 132,
+      borderRadius: 27,
+      borderWidth: 1,
+      borderColor: "rgba(255,255,255,0.3)",
+      backgroundColor: "rgba(255,255,255,0.1)",
+      alignItems: "center",
+      justifyContent: "center",
+      paddingHorizontal: 16,
+    },
+    codeText: {
+      color: "#fff",
+      fontSize: 18,
+      fontWeight: "600",
+      fontFamily: FontFamilies.mono.jetBrainsMono,
+      textTransform: "uppercase",
+      letterSpacing: 1,
+    },
+    codeDivider: {
+      color: "rgba(255,255,255,0.5)",
+      fontSize: 20,
+      fontWeight: "700",
+      fontFamily: FontFamilies.mono.jetBrainsMono,
+    },
+    hiddenInput: {
+      position: "absolute",
+      opacity: 0,
+      width: 1,
+      height: 1,
+    },
+    connectButton: {
+      width: "100%",
+      maxWidth: 320,
+      backgroundColor: "#2563eb",
+      borderRadius: 14,
+      height: 52,
+      alignItems: "center",
+      justifyContent: "center",
+    },
+    connectButtonDisabled: {
+      backgroundColor: "rgba(37,99,235,0.4)",
+    },
+    connectButtonText: {
+      color: "#ffffff",
+      fontSize: 17,
       fontWeight: "600",
       fontFamily: FontFamilies.normal.ibmPlexSans,
     },

@@ -7,6 +7,7 @@ import gsap from "gsap";
 import { GithubIcon } from "@/components/icons";
 import { DitheringShader } from "@/components/ui/dithering-shader";
 import { HoverButton } from "@/components/ui/hover-button";
+import heroChatImage from "@/public/01-chat-en-website-blue-iphone-1284x2778.png";
 
 export function HeroSection() {
   const containerRef = useRef<HTMLElement>(null);
@@ -134,7 +135,7 @@ export function HeroSection() {
           <div ref={phoneRef} className="relative flex items-center justify-center">
             <div className="relative h-[500px] w-[280px] md:h-[600px] md:w-[340px] lg:h-[700px] lg:w-[400px]">
               <Image
-                src="/01-chat-en-website-blue-iphone-1284x2778.png"
+                src={heroChatImage}
                 alt="Codex App Interface"
                 fill
                 sizes="(max-width: 768px) 280px, (max-width: 1024px) 340px, 400px"

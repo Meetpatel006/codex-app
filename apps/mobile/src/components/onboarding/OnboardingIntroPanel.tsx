@@ -24,9 +24,11 @@ export function OnboardingIntroPanel({ onPressStart, onLayout }: Props) {
     <View style={styles.container} onLayout={handleLayout}>
       <View style={styles.contentWrapper}>
         <View style={styles.textContainer}>
-          <Text style={styles.title}>Portdex</Text>
-          <Text style={styles.subtitle}>Fix bug and do coding </Text>
-          <Text style={styles.subtitleAccent}> in your pocket.</Text>
+          <Text style={styles.subtitle}>Fix bugs and ship code</Text>
+          <Text style={styles.subtitleAccent}>from your pocket.</Text>
+          <Text style={styles.subtitleSupport}>
+            Plan, review, and build faster wherever you are.
+          </Text>
         </View>
       </View>
       <View style={styles.buttonContainer}>
@@ -41,38 +43,60 @@ export function OnboardingIntroPanel({ onPressStart, onLayout }: Props) {
 const createStyles = (theme: ReturnType<typeof useTheme>) =>
   StyleSheet.create({
     container: {
-      padding: 15,
+      paddingHorizontal: 16,
+      paddingTop: 18,
       alignItems: "center",
     },
     contentWrapper: {
       alignItems: "center",
+      width: "100%",
+      maxWidth: 360,
     },
     textContainer: {
       alignItems: "center",
+      gap: 2,
     },
-    title: {
-      fontFamily: FontFamilies.display.spaceGrotesk,
-      fontSize: 40,
-      fontWeight: "700",
-      color: theme.text,
-      bottom: 18,
-    },
+    // title: {
+    //   fontFamily: FontFamilies.display.spaceGrotesk,
+    //   fontSize: 25,
+    //   lineHeight: 40,
+    //   letterSpacing: -0.6,
+    //   fontWeight: "700",
+    //   color: theme.text,
+    //   marginBottom: 12,
+    // },
     subtitle: {
       fontFamily: FontFamilies.normal.ibmPlexSans,
-      fontSize: 25,
+      fontSize: 30,
+      lineHeight: 36,
+      letterSpacing: -0.4,
       fontWeight: "500",
       color: theme.text,
-      bottom: 5,
+      textAlign: "center",
     },
     subtitleAccent: {
       fontFamily: FontFamilies.normal.ibmPlexSans,
-      fontSize: 25,
-      fontWeight: "500",
+      fontSize: 30,
+      lineHeight: 36,
+      letterSpacing: -0.4,
+      fontWeight: "600",
       color: theme.accent,
+      textAlign: "center",
+    },
+    subtitleSupport: {
+      marginTop: 8,
+      fontFamily: FontFamilies.normal.ibmPlexSans,
+      fontSize: 16,
+      lineHeight: 24,
+      fontWeight: "400",
+      color: theme.text,
+      textAlign: "center",
+      opacity: 0.85,
+      maxWidth: 320,
     },
 buttonContainer: {
-      paddingHorizontal: 40,
-      marginTop: 24,
+      paddingHorizontal: 28,
+      marginTop: 28,
       width: "100%",
     },
     button: {

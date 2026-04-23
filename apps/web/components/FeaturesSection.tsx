@@ -20,9 +20,9 @@ function FeatureRow({ title, description, reverse = false, screenshots = [] }: {
       <div className="flex-1">
         {screenshots.length > 0 ? (
           <div className="relative h-full w-full overflow-hidden rounded-[22px] bg-[linear-gradient(140deg,#446fe3_0%,#6f86e9_45%,#f4b3cc_100%)] p-3 shadow-[0_20px_55px_rgba(20,40,90,0.22)]">
-            <div className="flex items-end justify-center -space-x-6">
+            <div className="flex items-end gap-2 md:gap-3">
               {screenshots.map((src, index) => (
-                <div key={index} className="relative w-[200px] shrink-0">
+                <div key={index} className="relative min-w-0 flex-1">
                   <img
                     src={src}
                     alt={`Screenshot ${index + 1}`}
