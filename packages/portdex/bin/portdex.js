@@ -47,7 +47,6 @@ void main();
 async function main() {
   const args = process.argv.slice(2);
 
-  // Check version command first before parsing runtime args
   if (args.length > 0 && isVersionCommand(args[0])) {
     console.log(version);
     return;
@@ -55,127 +54,127 @@ async function main() {
 
   const { command, runtimeArgs } = parseCliArgs(args);
 
-  if (command === "up") {
-    if (process.platform === "darwin") {
-      const result = await startMacOSBridgeService({
-        waitForPairing: true,
-      });
-      printMacOSBridgePairingQr({
-        pairingSession: result.pairingSession,
-      });
+  try {
+    if (command === "up") {
+      if (process.platform === "darwin") {
+        const result = await startMacOSBridgeService({
+          waitForPairing: true,
+        });
+        printMacOSBridgePairingQr({
+          pairingSession: result.pairingSession,
+        });
+        return;
+      }
+
+      if (process.platform === "linux") {
+        const result = await startLinuxBridgeService({
+          waitForPairing: true,
+        });
+        printMacOSBridgePairingQr({
+          pairingSession: result.pairingSession,
+        });
+        return;
+      }
+
+      if (process.platform === "win32") {
+        const result = await startWindowsBridgeService({
+          waitForPairing: true,
+        });
+        printMacOSBridgePairingQr({
+          pairingSession: result.pairingSession,
+        });
+        return;
+      }
+
+      const runtimeOptions = parseRuntimeOptions({ args: runtimeArgs });
+      startBridge({ runtimeOptions });
       return;
     }
 
-    if (process.platform === "linux") {
-      const result = await startLinuxBridgeService({
-        waitForPairing: true,
-      });
-      printMacOSBridgePairingQr({
-        pairingSession: result.pairingSession,
-      });
+    if (command === "run") {
+      const runtimeOptions = parseRuntimeOptions({ args: runtimeArgs });
+      startBridge({ runtimeOptions });
       return;
     }
 
-    if (process.platform === "win32") {
-      const result = await startWindowsBridgeService({
-        waitForPairing: true,
-      });
-      printMacOSBridgePairingQr({
-        pairingSession: result.pairingSession,
-      });
+    if (command === "run-service") {
+      if (process.platform === "darwin") {
+        runMacOSBridgeService();
+        return;
+      }
+
+      runManagedBridgeService();
       return;
     }
 
-    const runtimeOptions = parseRuntimeOptions({ args: runtimeArgs });
-    startBridge({ runtimeOptions });
-    return;
-  }
+    if (command === "start") {
+      readBridgeConfig();
+      if (process.platform === "darwin") {
+        const result = await startMacOSBridgeService({ waitForPairing: true });
+        printMacOSBridgePairingQr({
+          pairingSession: result.pairingSession,
+        });
+        return;
+      }
+      if (process.platform === "linux") {
+        const result = await startLinuxBridgeService({ waitForPairing: true });
+        printMacOSBridgePairingQr({
+          pairingSession: result.pairingSession,
+        });
+        return;
+      }
+      if (process.platform === "win32") {
+        const result = await startWindowsBridgeService({ waitForPairing: true });
+        printMacOSBridgePairingQr({
+          pairingSession: result.pairingSession,
+        });
+        return;
+      }
 
-  if (command === "run") {
-    const runtimeOptions = parseRuntimeOptions({ args: runtimeArgs });
-    startBridge({ runtimeOptions });
-    return;
-  }
-
-  if (command === "run-service") {
-    if (process.platform === "darwin") {
-      runMacOSBridgeService();
+      assertServicePlatform(command);
       return;
     }
 
-    runManagedBridgeService();
-    return;
-  }
+    if (command === "stop") {
+      if (process.platform === "darwin") {
+        stopMacOSBridgeService();
+        console.log("[portdex] macOS bridge service stopped.");
+        return;
+      }
+      if (process.platform === "linux") {
+        stopLinuxBridgeService();
+        console.log("[portdex] Linux bridge service stopped.");
+        return;
+      }
+      if (process.platform === "win32") {
+        await stopWindowsBridgeService();
+        console.log("[portdex] Windows bridge service stopped.");
+        return;
+      }
 
-  if (command === "start") {
-    readBridgeConfig();
-    if (process.platform === "darwin") {
-      const result = await startMacOSBridgeService({ waitForPairing: true });
-      printMacOSBridgePairingQr({
-        pairingSession: result.pairingSession,
-      });
-      return;
-    }
-    if (process.platform === "linux") {
-      const result = await startLinuxBridgeService({ waitForPairing: true });
-      printMacOSBridgePairingQr({
-        pairingSession: result.pairingSession,
-      });
-      return;
-    }
-    if (process.platform === "win32") {
-      const result = await startWindowsBridgeService({ waitForPairing: true });
-      printMacOSBridgePairingQr({
-        pairingSession: result.pairingSession,
-      });
+      assertServicePlatform(command);
       return;
     }
 
-    assertServicePlatform(command);
-    return;
-  }
+    if (command === "status") {
+      if (process.platform === "darwin") {
+        printMacOSBridgeServiceStatus();
+        return;
+      }
+      if (process.platform === "linux") {
+        printLinuxBridgeServiceStatus();
+        return;
+      }
+      if (process.platform === "win32") {
+        printWindowsBridgeServiceStatus();
+        return;
+      }
 
-  if (command === "stop") {
-    if (process.platform === "darwin") {
-      stopMacOSBridgeService();
-      console.log("[portdex] macOS bridge service stopped.");
-      return;
-    }
-    if (process.platform === "linux") {
-      stopLinuxBridgeService();
-      console.log("[portdex] Linux bridge service stopped.");
-      return;
-    }
-    if (process.platform === "win32") {
-      await stopWindowsBridgeService();
-      console.log("[portdex] Windows bridge service stopped.");
+      assertServicePlatform(command);
       return;
     }
 
-    assertServicePlatform(command);
-    return;
-  }
-
-  if (command === "status") {
-    if (process.platform === "darwin") {
-      printMacOSBridgeServiceStatus();
-      return;
-    }
-    if (process.platform === "linux") {
-      printLinuxBridgeServiceStatus();
-      return;
-    }
-    if (process.platform === "win32") {
-      printWindowsBridgeServiceStatus();
-      return;
-    }
-
-    assertServicePlatform(command);
-    return;
-  }
-
-  if (command === "reset-pairing") {
-    try {
+    if (command === "reset-pairing") {
       if (process.platform === "darwin") {
         resetMacOSBridgePairing();
         console.log(
@@ -199,42 +198,32 @@ async function main() {
           "[portdex] Cleared the saved pairing state. Run `portdex up` to pair again.",
         );
       }
-    } catch (error) {
-      console.error(`[portdex] ${(error && error.message) || "Failed to clear the saved pairing state."}`);
-      process.exit(1);
+      return;
     }
-    return;
-  }
 
-  if (command === "resume") {
-    try {
+    if (command === "resume") {
       const state = openLastActiveThread();
       console.log(
         `[portdex] Last active thread: ${state.threadId} (${state.source || "unknown"})`
       );
-    } catch (error) {
-      console.error(`[portdex] ${(error && error.message) || "Failed to read the last thread."}`);
-      process.exit(1);
+      return;
     }
-    return;
-  }
 
-  if (command === "watch") {
-    try {
+    if (command === "watch") {
       watchThreadRollout(process.argv[3] || "");
-    } catch (error) {
-      console.error(`[portdex] ${(error && error.message) || "Failed to watch the thread rollout."}`);
-      process.exit(1);
+      return;
     }
-    return;
-  }
 
-  console.error(`Unknown command: ${command}`);
-  console.error(
-    "Usage: portdex up | portdex run | portdex start | portdex stop | portdex status | "
-    + "portdex reset-pairing | portdex resume | portdex watch [threadId] | portdex --version"
-  );
-  process.exit(1);
+    console.error(`Unknown command: ${command}`);
+    console.error(
+      "Usage: portdex up | portdex run | portdex start | portdex stop | portdex status | "
+      + "portdex reset-pairing | portdex resume | portdex watch [threadId] | portdex --version"
+    );
+    process.exit(1);
+  } catch (error) {
+    console.error(`[portdex] ${error.message}`);
+    process.exit(1);
+  }
 }
 
 function assertServicePlatform(name) {

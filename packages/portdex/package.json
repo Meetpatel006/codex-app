@@ -1,6 +1,6 @@
 {
   "name": "portdex",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "description": "Local bridge between Codex and the Portdex mobile app. Run `portdex up` to start.",
   "main": "dist/index.cjs",
   "bin": {
@@ -41,10 +41,5 @@
   },
   "engines": {
     "node": ">=18"
-  },
-  "homepage": "https://github.com/portdex/portdex#readme",
-  "repository": {
-    "type": "git",
-    "url": "https://github.com/portdex/portdex.git"
   }
 }
