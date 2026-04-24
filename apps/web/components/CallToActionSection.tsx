@@ -14,21 +14,23 @@ export function CallToActionSection() {
             <span className="text-[#93939f]">Your phone approves.</span>
           </h2>
 
-<div className="mt-8 flex flex-wrap justify-center gap-4">
+          <div className="mt-8 flex flex-wrap justify-center gap-4">
             <a
               href="#"
               className="rounded-3xl bg-blue-500 px-8 py-4 text-[16px] font-normal text-white transition-colors duration-200 hover:bg-blue-600 flex items-center gap-2"
             >
               <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
-                <polyline points="7 10 12 15 17 10"/>
-                <line x1="12" y1="15" x2="12" y2="3"/>
+                <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
+                <polyline points="7 10 12 15 17 10" />
+                <line x1="12" y1="15" x2="12" y2="3" />
               </svg>
-              Download APK
+              Comming Soon for Download
             </a>
             <HoverButton className="px-8 py-4 text-[16px] font-normal text-black flex items-center gap-2">
               <GithubIcon className="size-5" />
-              Coming Soon
+              <a href="https://github.com/Meetpatel006/codex-app" target="_blank" rel="noopener noreferrer">
+                Checkout on GitHub
+              </a>
             </HoverButton>
           </div>
         </div>

@@ -127,7 +127,9 @@ export function HeroSection() {
               </a>
               <HoverButton className="px-5 py-3 text-[15px] font-normal text-black flex items-center gap-2">
                 <GithubIcon className="size-5" />
-                Coming Soon
+                <a href="https://github.com/Meetpatel006/codex-app" target="_blank" rel="noopener noreferrer">
+                  Checkout on GitHub
+                </a>
               </HoverButton>
             </div>
           </div>
