@@ -15,10 +15,6 @@ export  function FlowButton({ text = "Modern Button", icon: Icon }: { text?: str
         {text}
       </span>
 
-      {Icon && (
-        <Icon className="relative z-[1] ml-2 w-4 h-4" />
-      )}
-
       <span className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-4 h-4 bg-blue-500 rounded-[50%] opacity-0 group-hover:w-[220px] group-hover:h-[220px] group-hover:opacity-100 transition-all duration-[800ms] ease-[cubic-bezier(0.19,1,0.22,1)]"></span>
 
       <ArrowRight 
