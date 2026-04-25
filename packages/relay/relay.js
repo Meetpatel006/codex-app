@@ -5,8 +5,6 @@
 
 const { createHash, createPublicKey, verify } = require("crypto");
 const { WebSocket } = require("ws");
-const fs = require("fs");
-const path = require("path");
 
 const CLEANUP_DELAY_MS = 60_000;
 const HEARTBEAT_INTERVAL_MS = 30_000;
@@ -19,72 +17,11 @@ const MAX_MAC_ABSENCE_BUFFER_BYTES = 512 * 1024;
 const TRUSTED_SESSION_RESOLVE_TAG = "portdex-trusted-session-resolve-v1";
 const TRUSTED_SESSION_RESOLVE_SKEW_MS = 90_000;
 
-const SHORT_CODE_DB_PATH = path.join(__dirname, "shortcodes.json");
-
 // In-memory session registry for one Mac host and one live iPhone client per session.
 const sessions = new Map();
 const liveSessionsByMacDeviceId = new Map();
 const usedResolveNonces = new Map();
 const shortCodeToSessionMap = new Map();
-
-function loadShortCodeDb() {
-  try {
-    if (fs.existsSync(SHORT_CODE_DB_PATH)) {
-      const data = JSON.parse(fs.readFileSync(SHORT_CODE_DB_PATH, "utf8"));
-      for (const [code, entry] of Object.entries(data)) {
-        shortCodeToSessionMap.set(code, entry);
-      }
-      const count = shortCodeToSessionMap.size;
-      if (count > 0) {
-        console.log(`[relay] Loaded ${count} short codes from disk`);
-      }
-    }
-  } catch (e) {
-    console.warn("[relay] Failed to load short code DB:", e.message);
-  }
-}
-
-function saveShortCodeDb() {
-  try {
-    const data = Object.fromEntries(shortCodeToSessionMap);
-    fs.writeFileSync(SHORT_CODE_DB_PATH, JSON.stringify(data, null, 2));
-  } catch (e) {
-    console.warn("[relay] Failed to save short code DB:", e.message);
-  }
-}
-
-loadShortCodeDb();
-
-setInterval(() => {
-  pruneExpiredShortCodes();
-  saveShortCodeDb();
-}, 60000);
-
-process.on("exit", () => saveShortCodeDb());
-process.on("SIGINT", () => {
-  saveShortCodeDb();
-  process.exit(0);
-});
-process.on("SIGTERM", () => {
-  saveShortCodeDb();
-  process.exit(0);
-});
-
-function getAllShortCodes() {
-  const now = Date.now();
-  const codes = [];
-  for (const [code, mapping] of shortCodeToSessionMap.entries()) {
-    codes.push({
-      code,
-      sessionId: mapping.sessionId,
-      macDeviceId: mapping.macDeviceId,
-      expiresAt: mapping.expiresAt,
-      isExpired: now >= mapping.expiresAt,
-      remainingMs: mapping.expiresAt - now,
-    });
-  }
-  return codes;
-}
 
 // Attaches relay behavior to a ws WebSocketServer instance.
 function setupRelay(
@@ -166,7 +103,7 @@ function setupRelay(
       session.mac = ws;
       flushBufferedIphoneMessages(session);
       registerLiveMacSession(session.macRegistration);
-      console.log(`[relay] Mac connected -> ${relaySessionLogLabel(sessionId)}, headers: ${JSON.stringify(req.headers)}`);
+      console.log(`[relay] Mac connected -> ${relaySessionLogLabel(sessionId)}`);
     } else {
       // Keep one live iPhone RPC client per session to avoid competing sockets.
       for (const existingClient of session.clients) {
@@ -194,7 +131,6 @@ function setupRelay(
 
     ws.on("message", (data) => {
       const msg = typeof data === "string" ? data : data.toString("utf-8");
-      console.log(`[relay] message on session ${sessionId}, role: ${role}, msg: ${msg.substring(0, 200)}`);
       if (role === "mac" && applyMacRegistrationMessage(session, sessionId, msg)) {
         return;
       }
@@ -507,10 +443,6 @@ function resolveShortCode({ shortCode, now = Date.now() } = {}) {
   pruneExpiredShortCodes(now);
 
   const mapping = shortCodeToSessionMap.get(normalizedCode);
-  console.log(`[relay] resolveShortCode ${normalizedCode}, found: ${!!mapping}, now: ${now}`);
-  if (mapping) {
-    console.log(`[relay] mapping expiresAt: ${mapping.expiresAt}, isExpired: ${now >= mapping.expiresAt}`);
-  }
   if (!mapping) {
     throw createRelayError(
       404,
@@ -546,16 +478,10 @@ function resolveShortCode({ shortCode, now = Date.now() } = {}) {
 }
 
 function pruneExpiredShortCodes(now = Date.now()) {
-  let deleted = 0;
   for (const [code, mapping] of shortCodeToSessionMap.entries()) {
     if (now >= mapping.expiresAt) {
       shortCodeToSessionMap.delete(code);
-      deleted++;
     }
-  }
-  if (deleted > 0) {
-    console.log(`[relay] Pruned ${deleted} expired short codes`);
-    saveShortCodeDb();
   }
 }
 
@@ -629,7 +555,6 @@ function applyMacRegistrationMessage(session, sessionId, rawMessage) {
       pairingPayload.relay &&
       pairingPayload.sessionId
     ) {
-      console.log(`[relay] Storing short code ${shortCode} for session ${sessionId}, expiresAt: ${pairingPayload.expiresAt}`);
       shortCodeToSessionMap.set(shortCode, {
         sessionId,
         macDeviceId: session.macRegistration.macDeviceId,
@@ -637,7 +562,6 @@ function applyMacRegistrationMessage(session, sessionId, rawMessage) {
         expiresAt: pairingPayload.expiresAt || Date.now() + 24 * 60 * 60 * 1000,
         relayUrl: pairingPayload.relay,
       });
-      saveShortCodeDb();
     }
   }
 
@@ -774,5 +698,4 @@ module.exports = {
   hasAuthenticatedMacSession,
   resolveTrustedMacSession,
   resolveShortCode,
-  getAllShortCodes,
 };
