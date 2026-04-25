@@ -40,3 +40,6 @@ yarn-error.log*
 *.pem
 
 *.html
+
+# Relay short codes persistence
+packages/relay/shortcodes.json

@@ -11,6 +11,7 @@ const {
   getRelayStats,
   resolveTrustedMacSession,
   resolveShortCode,
+  getAllShortCodes,
 } = require("./relay");
 
 function createRelayServer({
@@ -114,6 +115,23 @@ async function handleHTTPRequest(req, res, {
 
   if (req.method === "POST" && pathname === "/v1/code/resolve") {
     return handleJSONRoute(req, res, async (body) => resolveShortCode(body));
+  }
+
+  if (req.method === "GET" && pathname === "/v1/codes") {
+    const codes = getAllShortCodes();
+    return writeJSON(res, 200, {
+      ok: true,
+      count: codes.length,
+      codes,
+    });
+  }
+
+  if (req.method === "GET" && pathname === "/v1/codes/json") {
+    const codes = getAllShortCodes();
+    res.statusCode = 200;
+    res.setHeader("content-type", "application/json");
+    res.setHeader("content-disposition", "attachment; filename=shortcodes.json");
+    return res.end(JSON.stringify(codes, null, 2));
   }
 
   return writeJSON(res, 404, {
