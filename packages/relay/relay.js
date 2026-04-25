@@ -445,6 +445,10 @@ function resolveShortCode({ shortCode, now = Date.now() } = {}) {
   pruneExpiredShortCodes(now);
 
   const mapping = shortCodeToSessionMap.get(normalizedCode);
+  console.log(`[relay] resolveShortCode ${normalizedCode}, found: ${!!mapping}, now: ${now}`);
+  if (mapping) {
+    console.log(`[relay] mapping expiresAt: ${mapping.expiresAt}, isExpired: ${now >= mapping.expiresAt}`);
+  }
   if (!mapping) {
     throw createRelayError(
       404,
@@ -557,6 +561,7 @@ function applyMacRegistrationMessage(session, sessionId, rawMessage) {
       pairingPayload.relay &&
       pairingPayload.sessionId
     ) {
+      console.log(`[relay] Storing short code ${shortCode} for session ${sessionId}, expiresAt: ${pairingPayload.expiresAt}`);
       shortCodeToSessionMap.set(shortCode, {
         sessionId,
         macDeviceId: session.macRegistration.macDeviceId,
