@@ -27,7 +27,7 @@ function printQR(pairingPayload) {
       `Short Code: ${pairingPayload.shortCodeFormatted || pairingPayload.shortCode}`,
     );
   }
-  console.log(`Expires: ${new Date(pairingPayload.expiresAt).toISOString()}\n`);
+  console.log(`Expires: ${new Date(pairingPayload.expiresAt).toLocaleString()}\n`);
 }
 
 module.exports = { printQR };

@@ -1,4 +1,4 @@
-import AsyncStorage from "@react-native-async-storage/async-storage";
+import * as SecureStore from "expo-secure-store";
 
 const PFP_STORAGE_KEY = "user_pfp_index";
 
@@ -28,7 +28,7 @@ export const PFP_ASSETS = [
 
 export async function getStoredPfpAsset(): Promise<typeof PFP_ASSETS[number]> {
   try {
-    const storedIndex = await AsyncStorage.getItem(PFP_STORAGE_KEY);
+    const storedIndex = await SecureStore.getItemAsync(PFP_STORAGE_KEY);
     if (storedIndex !== null) {
       const index = parseInt(storedIndex, 10);
       if (!isNaN(index) && index >= 0 && index < PFP_ASSETS.length) {
@@ -36,7 +36,7 @@ export async function getStoredPfpAsset(): Promise<typeof PFP_ASSETS[number]> {
       }
     }
     const newIndex = Math.floor(Math.random() * PFP_ASSETS.length);
-    await AsyncStorage.setItem(PFP_STORAGE_KEY, newIndex.toString());
+    await SecureStore.setItemAsync(PFP_STORAGE_KEY, newIndex.toString());
     return PFP_ASSETS[newIndex];
   } catch (error) {
     console.warn("Failed to get stored PFP:", error);
@@ -46,7 +46,7 @@ export async function getStoredPfpAsset(): Promise<typeof PFP_ASSETS[number]> {
 
 export async function savePfpIndex(index: number) {
   try {
-    await AsyncStorage.setItem(PFP_STORAGE_KEY, index.toString());
+    await SecureStore.setItemAsync(PFP_STORAGE_KEY, index.toString());
   } catch (error) {
     console.warn("Failed to save PFP index:", error);
   }
