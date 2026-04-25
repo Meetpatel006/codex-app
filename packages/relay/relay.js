@@ -561,7 +561,7 @@ function applyMacRegistrationMessage(session, sessionId, rawMessage) {
         sessionId,
         macDeviceId: session.macRegistration.macDeviceId,
         macIdentityPublicKey: session.macRegistration.macIdentityPublicKey,
-        expiresAt: pairingPayload.expiresAt || Date.now() + 5 * 60 * 1000,
+        expiresAt: pairingPayload.expiresAt || Date.now() + 24 * 60 * 60 * 1000,
         relayUrl: pairingPayload.relay,
       });
     }
